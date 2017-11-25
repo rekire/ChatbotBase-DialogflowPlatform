@@ -63,24 +63,24 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
     render(reply) {
         let plainReply, formattedReply, messages = [], suggestions = [], context = [], test = [];
         let hasSimpleMessage = false;
-        reply.messages.forEach(msg => {
-            if (msg.platform === '*') {
-                if (msg.type === 'plain') {
-                    plainReply = msg.render();
+        reply.replies.forEach(reply => {
+            if (reply.platform === '*') {
+                if (reply.type === 'plain') {
+                    plainReply = reply.render();
                 }
-                else if (msg.type === 'formatted') {
-                    formattedReply = msg.render();
+                else if (reply.type === 'formatted') {
+                    formattedReply = reply.render();
                 }
             }
-            else if (msg.platform === 'Dialogflow') {
-                if (msg.type === 'simpleMessage') {
+            else if (reply.platform === 'Dialogflow') {
+                if (reply.type === 'simpleMessage') {
                     hasSimpleMessage = true;
                 }
-                if (msg.type === 'listCard') {
-                    test.push(msg.render());
+                if (reply.type === 'listCard') {
+                    test.push(reply.render());
                 }
                 else {
-                    messages.push(msg.render());
+                    messages.push(reply.render());
                 }
             }
         });
@@ -145,7 +145,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
     isSupported(json) {
         return json.hasOwnProperty('originalRequest') || (json.result && json.result.source);
     }
-    static simpleMessage(message) {
+    static simpleReply(message) {
         return {
             platform: 'Dialogflow',
             type: 'simpleMessage',
@@ -264,3 +264,4 @@ class ListItem {
     }
 }
 exports.ListItem = ListItem;
+//# sourceMappingURL=Dialogflow.js.map
