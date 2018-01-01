@@ -58,12 +58,12 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             text = body.result.resolvedQuery;
             userId = 'unknown';
         }
-        return new chatbotbase_1.Input(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data);
+        return new chatbotbase_1.Input(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest.data.user.accessToken);
     }
-    render(reply) {
+    render(output) {
         let plainReply, formattedReply, messages = [], suggestions = [], context = [], test = [];
         let hasSimpleMessage = false;
-        reply.replies.forEach(reply => {
+        output.replies.forEach(reply => {
             if (reply.platform === '*') {
                 if (reply.type === 'plain') {
                     plainReply = reply.render();
@@ -84,7 +84,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 }
             }
         });
-        reply.suggestions.forEach(suggestion => {
+        output.suggestions.forEach(suggestion => {
             if (suggestion.platform === 'Dialogflow') {
                 suggestions.push(suggestion.render());
             }
@@ -92,8 +92,8 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 suggestions.push(Dialogflow.suggestion(suggestion.render()).render());
             }
         });
-        for (let key in reply.context) {
-            let value = reply.context[key];
+        for (let key in output.context) {
+            let value = output.context[key];
             if ((typeof value) !== 'object') {
                 value = { value: value, boxed: true };
             }
@@ -118,7 +118,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             type: 2,
             replies: []
         };
-        reply.suggestions.forEach(suggestion => {
+        output.suggestions.forEach(suggestion => {
             if (suggestion.platform === '*') {
                 dialogflowSuggestions.replies.push(suggestion.render());
             }
@@ -129,7 +129,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             displayText: formattedReply || plainReply,
             data: {
                 google: {
-                    expectUserResponse: reply.expectAnswer,
+                    expectUserResponse: output.expectAnswer,
                     noInputPrompts: [],
                     richResponse: {
                         items: messages,
@@ -170,6 +170,27 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                         title: title,
                         formattedText: message,
                         buttons: typeof buttons === 'object' ? [buttons] : []
+                    }
+                };
+            },
+            debug: () => message
+        };
+    }
+    static basicCardWithPicture(title, message, imageUrl, accessibilityText = "", imageDisplayOptions = ImageDisplays.DEFAULT, buttons) {
+        return {
+            platform: 'Dialogflow',
+            type: 'basicCard',
+            render: () => {
+                return {
+                    basicCard: {
+                        title: title,
+                        formattedText: message,
+                        image: {
+                            url: imageUrl,
+                            accessibilityText: accessibilityText
+                        },
+                        buttons: typeof buttons === 'object' ? [buttons] : [],
+                        imageDisplayOptions: imageDisplayOptions
                     }
                 };
             },
@@ -264,4 +285,26 @@ class ListItem {
     }
 }
 exports.ListItem = ListItem;
+/**
+ * List of possible options to display the image in a BasicCard.
+ * When the aspect ratio of an image is not the same as the surface,
+ * this attribute changes how the image is displayed in the card.
+ * @enum {string}
+ */
+var ImageDisplays;
+(function (ImageDisplays) {
+    /**
+     * Pads the gaps between the image and image frame with a blurred copy of the
+     * same image.
+     */
+    ImageDisplays["DEFAULT"] = "DEFAULT";
+    /**
+     * Fill the gap between the image and image container with white bars.
+     */
+    ImageDisplays["WHITE"] = "WHITE";
+    /**
+     * Image is centered and resized so the image fits perfectly in the container.
+     */
+    ImageDisplays["CROPPED"] = "CROPPED";
+})(ImageDisplays = exports.ImageDisplays || (exports.ImageDisplays = {}));
 //# sourceMappingURL=Dialogflow.js.map

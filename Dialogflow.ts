@@ -66,13 +66,14 @@ export class Dialogflow extends VoicePlatform {
             body.result.metadata.intentName,
             inputMethod,
             text,
-            data);
+            data,
+            body.originalRequest.data.user.accessToken);
     }
 
-    render(reply: Output): any {
+    render(output: Output): any {
         let plainReply, formattedReply, messages = <any>[], suggestions = <any>[], context = <any>[], test = <any>[];
         let hasSimpleMessage = false;
-        reply.replies.forEach(reply => {
+        output.replies.forEach(reply => {
             if(reply.platform === '*') {
                 if(reply.type === 'plain') {
                     plainReply = reply.render();
@@ -91,15 +92,15 @@ export class Dialogflow extends VoicePlatform {
                 }
             }
         });
-        reply.suggestions.forEach(suggestion => {
+        output.suggestions.forEach(suggestion => {
             if(suggestion.platform === 'Dialogflow') {
                 suggestions.push(suggestion.render());
             } else if(suggestion.platform === '*') {
                 suggestions.push(Dialogflow.suggestion(suggestion.render()).render());
             }
         });
-        for(let key in reply.context) {
-            let value = reply.context[key];
+        for(let key in output.context) {
+            let value = output.context[key];
             if((typeof value) !== 'object') {
                 value = {value: value, boxed: true};
             }
@@ -124,7 +125,7 @@ export class Dialogflow extends VoicePlatform {
             type: 2,
             replies: <any>[]
         };
-        reply.suggestions.forEach(suggestion => {
+        output.suggestions.forEach(suggestion => {
             if(suggestion.platform === '*') {
                 dialogflowSuggestions.replies.push(suggestion.render())
             }
@@ -135,7 +136,7 @@ export class Dialogflow extends VoicePlatform {
             displayText: formattedReply || plainReply,
             data: {
                 google: {
-                    expectUserResponse: reply.expectAnswer,
+                    expectUserResponse: output.expectAnswer,
                     noInputPrompts: [],
                     richResponse: {
                         items: messages,
@@ -179,6 +180,28 @@ export class Dialogflow extends VoicePlatform {
                         title: title,
                         formattedText: message,
                         buttons: typeof buttons === 'object' ? [buttons] : []
+                    }
+                }
+            },
+            debug: () => message
+        };
+    }
+
+    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string = "", imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, buttons?: DialogflowButton): Reply {
+        return <Reply>{
+            platform: 'Dialogflow',
+            type: 'basicCard',
+            render: () => {
+                return {
+                    basicCard: {
+                        title: title,
+                        formattedText: message,
+                        image: {
+                            url: imageUrl,
+                            accessibilityText: accessibilityText
+                        },
+                        buttons: typeof buttons === 'object' ? [buttons] : [],
+                        imageDisplayOptions: imageDisplayOptions
                     }
                 }
             },
@@ -283,4 +306,26 @@ export class ListItem {
             }
         };
     }
+}
+
+/**
+ * List of possible options to display the image in a BasicCard.
+ * When the aspect ratio of an image is not the same as the surface,
+ * this attribute changes how the image is displayed in the card.
+ * @enum {string}
+ */
+export enum ImageDisplays {
+    /**
+     * Pads the gaps between the image and image frame with a blurred copy of the
+     * same image.
+     */
+    DEFAULT = 'DEFAULT',
+    /**
+     * Fill the gap between the image and image container with white bars.
+     */
+    WHITE = 'WHITE',
+    /**
+     * Image is centered and resized so the image fits perfectly in the container.
+     */
+    CROPPED = 'CROPPED'
 }
