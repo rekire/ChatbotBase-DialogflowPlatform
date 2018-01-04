@@ -179,7 +179,7 @@ export class Dialogflow extends VoicePlatform {
                     basicCard: {
                         title: title,
                         formattedText: message,
-                        buttons: typeof buttons === 'object' ? [buttons] : []
+                        buttons: typeof buttons === 'object' ? [buttons.render()] : []
                     }
                 }
             },
@@ -200,7 +200,7 @@ export class Dialogflow extends VoicePlatform {
                             url: imageUrl,
                             accessibilityText: accessibilityText
                         },
-                        buttons: typeof buttons === 'object' ? [buttons] : [],
+                        buttons: typeof buttons === 'object' ? [buttons.render()] : [],
                         imageDisplayOptions: imageDisplayOptions
                     }
                 }
@@ -222,7 +222,7 @@ export class Dialogflow extends VoicePlatform {
                             url: imageUrl,
                             accessibility_text: contentDescription
                         },
-                        buttons: buttons ? [] : [buttons],
+                        buttons: typeof buttons === 'object' ? [buttons.render()] : [],
                         imageDisplayOptions: 'CROPPED'
                         // https://github.com/actions-on-google/actions-on-google-nodejs/commit/72dfe485797804e0be921d31822a7fa71234bce7
                     }
