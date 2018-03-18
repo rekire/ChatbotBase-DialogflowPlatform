@@ -5,9 +5,15 @@ The platform implementation for Dialogflow (v1) for [ChatbotBase][chatbotbase]
   [![NPM Downloads][downloads-image]][downloads-url]
   
 ## Features
- - Simple response: Spreak out the given text
- - Cards
+ - Simple response: Speak out the given text
+ - Cards (with and without images)
  - Listings
+ - Suggestions
+ 
+## Planed Features
+ - Parameter support
+ - Permission handling
+ - Location requests
   
 ## License
   [Apache 2.0](LICENSE)
