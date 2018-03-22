@@ -7,7 +7,7 @@ export class Dialogflow extends VoicePlatform {
     }
 
     parse(body: any): Input {
-        console.log("INPUT", body);
+        console.log('INPUT', body);
         const data: Context = {};
         let inputMethod = InputMethod.text;
         body.result.contexts.forEach(context => {
@@ -146,7 +146,7 @@ export class Dialogflow extends VoicePlatform {
             },
             messages: test,
             contextOut: context,
-            source: "Whatever"
+            source: 'Whatever'
         };
     }
 
@@ -187,7 +187,7 @@ export class Dialogflow extends VoicePlatform {
         };
     }
 
-    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string = "", imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, buttons?: DialogflowButton): Reply {
+    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string = '', imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, buttons?: DialogflowButton): Reply {
         return <Reply>{
             platform: 'Dialogflow',
             type: 'basicCard',
@@ -228,7 +228,7 @@ export class Dialogflow extends VoicePlatform {
                     }
                 }
             },
-            debug: () => 'Dialog with title "' + title + '" and message "' + message + '"'
+            debug: () => `Dialog with title "${title}" and message "${message}".`
         };
     }
 
@@ -252,8 +252,8 @@ export class Dialogflow extends VoicePlatform {
             type: 'listCard',
             render: () => {
                 return {
-                    type: "list_card",
-                    platform: "google",
+                    type: 'list_card',
+                    platform: 'google',
                     title: cardTitle,
                     items: items
                 }
