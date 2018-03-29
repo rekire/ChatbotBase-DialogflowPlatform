@@ -1,4 +1,4 @@
-import {Input, Reply, InputMethod, VoicePlatform, Suggestion, Context, Output} from 'chatbotbase';
+import {Input, Reply, InputMethod, VoicePlatform, Suggestion, Context, Output, VoicePermission} from 'chatbotbase';
 
 // TODO split the logic since this is just partially supporting Dialogflow (in fact just Actions on Google)
 export class Dialogflow extends VoicePlatform {
@@ -9,6 +9,7 @@ export class Dialogflow extends VoicePlatform {
     parse(body: any): Input {
         console.log('INPUT', body);
         const data: Context = {};
+        const internalData = new Map<string, any>();
         let inputMethod = InputMethod.text;
         body.result.contexts.forEach(context => {
             if(context.parameters && context.parameters.boxed === true) {
@@ -56,7 +57,10 @@ export class Dialogflow extends VoicePlatform {
             text = body.result.resolvedQuery;
             userId = 'unknown';
         }
-        return new Input(
+        if(body.originalRequest.data.device && body.originalRequest.data.device.location) {
+            internalData.set('location', body.originalRequest.data.device.location);
+        }
+        return new DialogflowInput(
             body.id,
             userId,
             body.sessionId,
@@ -67,12 +71,14 @@ export class Dialogflow extends VoicePlatform {
             inputMethod,
             text,
             data,
-            body.originalRequest.data.user.accessToken);
+            body.originalRequest.data.user.accessToken,
+            internalData);
     }
 
     render(output: Output): any {
         let plainReply, formattedReply, messages = <any>[], suggestions = <any>[], context = <any>[], test = <any>[];
         let hasSimpleMessage = false;
+        let systemIntent: any = null;
         output.replies.forEach(reply => {
             if(reply.platform === '*') {
                 if(reply.type === 'plain') {
@@ -89,6 +95,18 @@ export class Dialogflow extends VoicePlatform {
                     test.push(reply.render());
                 } else {
                     messages.push(reply.render());
+                }
+            } else if(reply.platform === 'ActionsOnGoogle') {
+                if(reply.type === 'permission') {
+                    if(systemIntent !== null) {
+                        console.log('There can be just one system intent. The last is overwritten now!');
+                    }
+                    systemIntent = {
+                        intent: 'assistant.intent.action.PERMISSION',
+                        spec: reply.render()
+                    };
+                } else if(reply.type === 'system_intent') {
+                    systemIntent = reply.render();
                 }
             }
         });
@@ -140,18 +158,65 @@ export class Dialogflow extends VoicePlatform {
                     noInputPrompts: [],
                     richResponse: {
                         items: messages,
-                        suggestions: suggestions
-                    }
+                        suggestions
+                    },
+                    systemIntent
                 }
             },
             messages: test,
             contextOut: context,
-            source: 'Whatever'
+            source: 'ChatbotBase'
         };
     }
 
     isSupported(json: any) {
         return json.hasOwnProperty('originalRequest') || (json.result && json.result.source)
+    }
+
+    requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined {
+        let permissionList;
+        if(permissions instanceof Array) {
+            permissionList = permissions;
+        } else {
+            permissionList = [permissions];
+        }
+        if(permissionList.length > 0) return undefined;
+        const voicePermissions: String[] = [];
+        permissionList.forEach(permission => {
+            switch(permission) {
+            case VoicePermission.ExactPosition:
+                voicePermissions.push('DEVICE_PRECISE_LOCATION');
+                break;
+            case VoicePermission.RegionalPosition:
+                voicePermissions.push('DEVICE_COARSE_LOCATION');
+                break;
+            case VoicePermission.UserName:
+                voicePermissions.push('NAME');
+                break;
+                //case VoicePermission.Push:
+                //    voicePermissions.push('UPDATE');
+                //    break;
+            case 'UPDATE':
+            case 'UNSPECIFIED_PERMISSION':
+                voicePermissions.push(permission);
+                break;
+            default:
+                return undefined;
+            }
+        });
+        return {
+            platform: 'ActionsOnGoogle',
+            type: 'permission',
+            render: () => {
+                return {
+                    permission_value_spec: {
+                        opt_context: reason,
+                        permissions: voicePermissions
+                    }
+                }
+            },
+            debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
+        };
     }
 
     static simpleReply(message: string): Reply {
@@ -261,6 +326,13 @@ export class Dialogflow extends VoicePlatform {
             debug: () => 'debug'
         }
     }
+
+    static getPosition(input: Input): ActionsOnGoogleLocation | null {
+        if(input instanceof DialogflowInput) {
+            return input.data.get('location');
+        }
+        return null;
+    }
 }
 
 export class DialogflowButton {
@@ -328,4 +400,48 @@ export enum ImageDisplays {
      * Image is centered and resized so the image fits perfectly in the container.
      */
     CROPPED = 'CROPPED'
+}
+
+/**
+ * The location of a user as reported by Actions on Google.
+ */
+export class ActionsOnGoogleLocation {
+    public zipCode: string | null;
+    public formattedAddress: string | null;
+    public city: string | null;
+    public coordinates: ActionsOnGoogleCoordinates;
+}
+
+/**
+ * The coordinates of the uer as reported by Actions on Google.
+ */
+export class ActionsOnGoogleCoordinates {
+    public latitude: number;
+    public longitude: number;
+}
+
+/**
+ * Private extended model to store metadata of an input.
+ */
+class DialogflowInput extends Input {
+    /**
+     * Private internal data
+     */
+    data: Map<string, any>;
+
+    constructor(id: string,
+                userId: string,
+                sessionId: string,
+                language: string,
+                platform: string,
+                time: Date,
+                intent: string,
+                inputMethod: InputMethod,
+                message: string,
+                context: Context,
+                accessToken: string,
+                data: Map<string, any>) {
+        super(id, userId, sessionId, language, platform, time, intent, inputMethod, message, context, accessToken);
+        this.data = data;
+    }
 }

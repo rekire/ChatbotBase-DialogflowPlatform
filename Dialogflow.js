@@ -7,8 +7,9 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         return 'Dialogflow';
     }
     parse(body) {
-        console.log("INPUT", body);
+        console.log('INPUT', body);
         const data = {};
+        const internalData = new Map();
         let inputMethod = chatbotbase_1.InputMethod.text;
         body.result.contexts.forEach(context => {
             if (context.parameters && context.parameters.boxed === true) {
@@ -58,11 +59,15 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             text = body.result.resolvedQuery;
             userId = 'unknown';
         }
-        return new chatbotbase_1.Input(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest.data.user.accessToken);
+        if (body.originalRequest.data.device && body.originalRequest.data.device.location) {
+            internalData.set('location', body.originalRequest.data.device.location);
+        }
+        return new DialogflowInput(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest.data.user.accessToken, internalData);
     }
     render(output) {
         let plainReply, formattedReply, messages = [], suggestions = [], context = [], test = [];
         let hasSimpleMessage = false;
+        let systemIntent = null;
         output.replies.forEach(reply => {
             if (reply.platform === '*') {
                 if (reply.type === 'plain') {
@@ -81,6 +86,20 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 }
                 else {
                     messages.push(reply.render());
+                }
+            }
+            else if (reply.platform === 'ActionsOnGoogle') {
+                if (reply.type === 'permission') {
+                    if (systemIntent !== null) {
+                        console.log('There can be just one system intent. The last is overwritten now!');
+                    }
+                    systemIntent = {
+                        intent: 'assistant.intent.action.PERMISSION',
+                        spec: reply.render()
+                    };
+                }
+                else if (reply.type === 'system_intent') {
+                    systemIntent = reply.render();
                 }
             }
         });
@@ -133,17 +152,65 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     noInputPrompts: [],
                     richResponse: {
                         items: messages,
-                        suggestions: suggestions
-                    }
+                        suggestions
+                    },
+                    systemIntent
                 }
             },
             messages: test,
             contextOut: context,
-            source: "Whatever"
+            source: 'ChatbotBase'
         };
     }
     isSupported(json) {
         return json.hasOwnProperty('originalRequest') || (json.result && json.result.source);
+    }
+    requestPermission(reason, permissions) {
+        let permissionList;
+        if (permissions instanceof Array) {
+            permissionList = permissions;
+        }
+        else {
+            permissionList = [permissions];
+        }
+        if (permissionList.length > 0)
+            return undefined;
+        const voicePermissions = [];
+        permissionList.forEach(permission => {
+            switch (permission) {
+                case chatbotbase_1.VoicePermission.ExactPosition:
+                    voicePermissions.push('DEVICE_PRECISE_LOCATION');
+                    break;
+                case chatbotbase_1.VoicePermission.RegionalPosition:
+                    voicePermissions.push('DEVICE_COARSE_LOCATION');
+                    break;
+                case chatbotbase_1.VoicePermission.UserName:
+                    voicePermissions.push('NAME');
+                    break;
+                //case VoicePermission.Push:
+                //    voicePermissions.push('UPDATE');
+                //    break;
+                case 'UPDATE':
+                case 'UNSPECIFIED_PERMISSION':
+                    voicePermissions.push(permission);
+                    break;
+                default:
+                    return undefined;
+            }
+        });
+        return {
+            platform: 'ActionsOnGoogle',
+            type: 'permission',
+            render: () => {
+                return {
+                    permission_value_spec: {
+                        opt_context: reason,
+                        permissions: voicePermissions
+                    }
+                };
+            },
+            debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
+        };
     }
     static simpleReply(message) {
         return {
@@ -176,7 +243,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             debug: () => message
         };
     }
-    static basicCardWithPicture(title, message, imageUrl, accessibilityText = "", imageDisplayOptions = ImageDisplays.DEFAULT, buttons) {
+    static basicCardWithPicture(title, message, imageUrl, accessibilityText = '', imageDisplayOptions = ImageDisplays.DEFAULT, buttons) {
         return {
             platform: 'Dialogflow',
             type: 'basicCard',
@@ -216,7 +283,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     }
                 };
             },
-            debug: () => 'Dialog with title "' + title + '" and message "' + message + '"'
+            debug: () => `Dialog with title "${title}" and message "${message}".`
         };
     }
     static suggestion(suggestion) {
@@ -238,14 +305,20 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             type: 'listCard',
             render: () => {
                 return {
-                    type: "list_card",
-                    platform: "google",
+                    type: 'list_card',
+                    platform: 'google',
                     title: cardTitle,
                     items: items
                 };
             },
             debug: () => 'debug'
         };
+    }
+    static getPosition(input) {
+        if (input instanceof DialogflowInput) {
+            return input.data.get('location');
+        }
+        return null;
     }
 }
 exports.Dialogflow = Dialogflow;
@@ -307,4 +380,25 @@ var ImageDisplays;
      */
     ImageDisplays["CROPPED"] = "CROPPED";
 })(ImageDisplays = exports.ImageDisplays || (exports.ImageDisplays = {}));
+/**
+ * The location of a user as reported by Actions on Google.
+ */
+class ActionsOnGoogleLocation {
+}
+exports.ActionsOnGoogleLocation = ActionsOnGoogleLocation;
+/**
+ * The coordinates of the uer as reported by Actions on Google.
+ */
+class ActionsOnGoogleCoordinates {
+}
+exports.ActionsOnGoogleCoordinates = ActionsOnGoogleCoordinates;
+/**
+ * Private extended model to store metadata of an input.
+ */
+class DialogflowInput extends chatbotbase_1.Input {
+    constructor(id, userId, sessionId, language, platform, time, intent, inputMethod, message, context, accessToken, data) {
+        super(id, userId, sessionId, language, platform, time, intent, inputMethod, message, context, accessToken);
+        this.data = data;
+    }
+}
 //# sourceMappingURL=Dialogflow.js.map
