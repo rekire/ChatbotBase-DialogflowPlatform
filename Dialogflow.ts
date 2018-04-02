@@ -221,8 +221,8 @@ export class Dialogflow extends VoicePlatform {
         };
     }
 
-    static displayTextReply(message: string): Reply {
-        return {
+    static simpleReply(message: string): Reply {
+        return <Reply>{
             platform: 'Dialogflow',
             type: 'simpleMessage',
             render: () => {

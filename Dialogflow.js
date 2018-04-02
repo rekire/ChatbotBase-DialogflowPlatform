@@ -215,7 +215,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
         };
     }
-    static displayTextReply(message) {
+    static simpleReply(message) {
         return {
             platform: 'Dialogflow',
             type: 'simpleMessage',
