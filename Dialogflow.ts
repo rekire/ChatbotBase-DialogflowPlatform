@@ -76,25 +76,24 @@ export class Dialogflow extends VoicePlatform {
     }
 
     render(output: Output): any {
-        let plainReply, formattedReply, messages = <any>[], suggestions = <any>[], context = <any>[], test = <any>[];
+        let ssml, displayText, richMessages = <any>[], suggestions = <any>[], context = <any>[], messages = <any>[];
         let hasSimpleMessage = false;
         let systemIntent: any = null;
         output.replies.forEach(reply => {
             if(reply.platform === '*') {
-                if(reply.type === 'plain') {
-                    plainReply = reply.render();
-
-                } else if(reply.type === 'formatted') {
-                    formattedReply = reply.render();
+                if(reply.type === 'ssml') {
+                    ssml = reply.render();
+                } else if(reply.type === 'text') {
+                    displayText = reply.render();
                 }
             } else if(reply.platform === 'Dialogflow') {
                 if(reply.type === 'simpleMessage') {
                     hasSimpleMessage = true;
                 }
                 if(reply.type === 'listCard') {
-                    test.push(reply.render());
-                } else {
                     messages.push(reply.render());
+                } else {
+                    richMessages.push(reply.render());
                 }
             } else if(reply.platform === 'ActionsOnGoogle') {
                 if(reply.type === 'permission') {
@@ -124,21 +123,24 @@ export class Dialogflow extends VoicePlatform {
             }
             context.push({name: key, lifespan: 60, parameters: value});
         }
-        formattedReply = formattedReply || plainReply;
-        // add the plain response if there is no explicit simple response
+        // Generate proper default values
+        displayText = displayText || '';
+        ssml = ssml || displayText.replace(/<[^>]+>/g, '');
+        displayText = displayText || ssml.replace(/<[^>]+>/g, '');
+        // add the display response if there is no explicit simple response
         if(!hasSimpleMessage) {
             // insert at front
             const newList = [{
                 simpleResponse: {
-                    textToSpeech: plainReply,
-                    displayText: formattedReply
+                    textToSpeech: ssml,
+                    displayText
                 }
             }];
-            messages.forEach(msg => newList.push(msg));
-            messages = newList
+            richMessages.forEach(msg => newList.push(msg));
+            richMessages = newList
         }
         // add the plain response for dialogflow
-        test.push([{type: 0, speech: plainReply}]);
+        messages.push([{type: 0, speech: displayText}]);
         const dialogflowSuggestions = {
             type: 2,
             replies: <any>[]
@@ -148,22 +150,22 @@ export class Dialogflow extends VoicePlatform {
                 dialogflowSuggestions.replies.push(suggestion.render())
             }
         });
-        test.push(dialogflowSuggestions);
+        messages.push(dialogflowSuggestions);
         return {
-            speech: `<speak>${plainReply}</speak>`,
-            displayText: formattedReply || plainReply,
+            speech: `<speak>${ssml}</speak>`,
+            displayText,
             data: {
                 google: {
                     expectUserResponse: output.expectAnswer,
                     noInputPrompts: [],
                     richResponse: {
-                        items: messages,
+                        items: richMessages,
                         suggestions
                     },
                     systemIntent
                 }
             },
-            messages: test,
+            messages,
             contextOut: context,
             source: 'ChatbotBase'
         };
@@ -219,8 +221,8 @@ export class Dialogflow extends VoicePlatform {
         };
     }
 
-    static simpleReply(message: string): Reply {
-        return <Reply>{
+    static displayTextReply(message: string): Reply {
+        return {
             platform: 'Dialogflow',
             type: 'simpleMessage',
             render: () => {
@@ -236,7 +238,7 @@ export class Dialogflow extends VoicePlatform {
     }
 
     static basicCard(title: string, message: string, buttons?: DialogflowButton): Reply {
-        return <Reply>{
+        return {
             platform: 'Dialogflow',
             type: 'basicCard',
             render: () => {
@@ -253,7 +255,7 @@ export class Dialogflow extends VoicePlatform {
     }
 
     static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string = '', imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, buttons?: DialogflowButton): Reply {
-        return <Reply>{
+        return {
             platform: 'Dialogflow',
             type: 'basicCard',
             render: () => {
@@ -275,7 +277,7 @@ export class Dialogflow extends VoicePlatform {
     }
 
     static imageCard(title: string, message: string, imageUrl: string, contentDescription?: string, buttons?: DialogflowButton): Reply {
-        return <Reply>{
+        return {
             platform: 'Dialogflow',
             type: 'basicCard',
             render: () => {
@@ -310,9 +312,9 @@ export class Dialogflow extends VoicePlatform {
     }
 
     static listResponse(cardTitle: string, list: ListItem[]): Reply {
-        const items = <any>[];
+        const items: any[] = [];
         list.forEach(item => items.push(item.render()));
-        return <Reply>{
+        return {
             platform: 'Dialogflow',
             type: 'listCard',
             render: () => {

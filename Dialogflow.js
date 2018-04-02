@@ -65,16 +65,16 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         return new DialogflowInput(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest.data.user.accessToken, internalData);
     }
     render(output) {
-        let plainReply, formattedReply, messages = [], suggestions = [], context = [], test = [];
+        let ssml, displayText, richMessages = [], suggestions = [], context = [], messages = [];
         let hasSimpleMessage = false;
         let systemIntent = null;
         output.replies.forEach(reply => {
             if (reply.platform === '*') {
-                if (reply.type === 'plain') {
-                    plainReply = reply.render();
+                if (reply.type === 'ssml') {
+                    ssml = reply.render();
                 }
-                else if (reply.type === 'formatted') {
-                    formattedReply = reply.render();
+                else if (reply.type === 'text') {
+                    displayText = reply.render();
                 }
             }
             else if (reply.platform === 'Dialogflow') {
@@ -82,10 +82,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     hasSimpleMessage = true;
                 }
                 if (reply.type === 'listCard') {
-                    test.push(reply.render());
+                    messages.push(reply.render());
                 }
                 else {
-                    messages.push(reply.render());
+                    richMessages.push(reply.render());
                 }
             }
             else if (reply.platform === 'ActionsOnGoogle') {
@@ -118,21 +118,24 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             }
             context.push({ name: key, lifespan: 60, parameters: value });
         }
-        formattedReply = formattedReply || plainReply;
-        // add the plain response if there is no explicit simple response
+        // Generate proper default values
+        displayText = displayText || '';
+        ssml = ssml || displayText.replace(/<[^>]+>/g, '');
+        displayText = displayText || ssml.replace(/<[^>]+>/g, '');
+        // add the display response if there is no explicit simple response
         if (!hasSimpleMessage) {
             // insert at front
             const newList = [{
                     simpleResponse: {
-                        textToSpeech: plainReply,
-                        displayText: formattedReply
+                        textToSpeech: ssml,
+                        displayText
                     }
                 }];
-            messages.forEach(msg => newList.push(msg));
-            messages = newList;
+            richMessages.forEach(msg => newList.push(msg));
+            richMessages = newList;
         }
         // add the plain response for dialogflow
-        test.push([{ type: 0, speech: plainReply }]);
+        messages.push([{ type: 0, speech: displayText }]);
         const dialogflowSuggestions = {
             type: 2,
             replies: []
@@ -142,22 +145,22 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 dialogflowSuggestions.replies.push(suggestion.render());
             }
         });
-        test.push(dialogflowSuggestions);
+        messages.push(dialogflowSuggestions);
         return {
-            speech: `<speak>${plainReply}</speak>`,
-            displayText: formattedReply || plainReply,
+            speech: `<speak>${ssml}</speak>`,
+            displayText,
             data: {
                 google: {
                     expectUserResponse: output.expectAnswer,
                     noInputPrompts: [],
                     richResponse: {
-                        items: messages,
+                        items: richMessages,
                         suggestions
                     },
                     systemIntent
                 }
             },
-            messages: test,
+            messages,
             contextOut: context,
             source: 'ChatbotBase'
         };
@@ -212,7 +215,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
         };
     }
-    static simpleReply(message) {
+    static displayTextReply(message) {
         return {
             platform: 'Dialogflow',
             type: 'simpleMessage',

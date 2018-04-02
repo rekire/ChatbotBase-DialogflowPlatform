@@ -5,7 +5,7 @@ export declare class Dialogflow extends VoicePlatform {
     render(output: Output): any;
     isSupported(json: any): any;
     requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined;
-    static simpleReply(message: string): Reply;
+    static displayTextReply(message: string): Reply;
     static basicCard(title: string, message: string, buttons?: DialogflowButton): Reply;
     static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText?: string, imageDisplayOptions?: ImageDisplays, buttons?: DialogflowButton): Reply;
     static imageCard(title: string, message: string, imageUrl: string, contentDescription?: string, buttons?: DialogflowButton): Reply;
