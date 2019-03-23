@@ -9,11 +9,11 @@ The platform implementation for Dialogflow (v1 and v2) for [ChatbotBase][chatbot
  - Cards (with and without images)
  - Listings
  - Suggestions
+ - Permission handling
+ - Location requests
  
 ## Planed Features
  - Parameter support
- - Permission handling
- - Location requests
   
 ## License
 [Apache 2.0](LICENSE)
