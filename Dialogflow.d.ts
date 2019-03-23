@@ -2,6 +2,8 @@ import { Input, Output, Reply, Suggestion, VoicePermission, VoicePlatform } from
 export declare class Dialogflow extends VoicePlatform {
     platformId(): string;
     parse(body: any): Input;
+    private parseApiV1;
+    private parseApiV2;
     render(output: Output): any;
     isSupported(json: any): any;
     requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined;
@@ -12,13 +14,37 @@ export declare class Dialogflow extends VoicePlatform {
      * @returns {boolean} true if it is possible to request the login.
      */
     static requestLogin(): Reply;
+    /**
+     * Creates a simple response where the spoken text is equal to the shown text.
+     * @param message the message the user should read and hear.
+     */
     static simpleReply(message: string): Reply;
-    static basicCard(title: string, message: string, buttons?: DialogflowButton): Reply;
-    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText?: string, imageDisplayOptions?: ImageDisplays, buttons?: DialogflowButton): Reply;
-    static imageCard(title: string, message: string, imageUrl: string, contentDescription?: string, buttons?: DialogflowButton): Reply;
+    /**
+     * Creates a basic card holds a title, a messages and optional a button.
+     * @param title The title of the card.
+     * @param message The message of the card.
+     * @param button The button which should be shown (optional).
+     */
+    static basicCard(title: string, message: string, button?: DialogflowButton): Reply;
+    /**
+     * Creates a basic card with an image a title, a messages and optional a button.
+     * @param title The title of the card.
+     * @param message The message of the card.
+     * @param imageUrl The url of the image to show.
+     * @param accessibilityText The accessibility text for the image.
+     * @param imageDisplayOptions The image display options, by default DEFAULT.
+     * @param button The button which should be shown (optional).
+     */
+    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string, imageDisplayOptions?: ImageDisplays, button?: DialogflowButton): Reply;
     static suggestion(suggestion: string): Suggestion;
     static listResponse(cardTitle: string, list: ListItem[]): Reply;
     static getPosition(input: Input): ActionsOnGoogleLocation | null;
+    /**
+     * Defines a
+     * @param ssml
+     * @param displayText
+     */
+    static splittedSimpleReply(ssml: string, displayText: string): Reply;
 }
 export declare class DialogflowButton {
     private output;

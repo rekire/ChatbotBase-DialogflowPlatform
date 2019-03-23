@@ -8,7 +8,14 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
     }
     parse(body) {
         console.log('INPUT', body);
-        const data = {};
+        if (body.result && body.result.source)
+            return this.parseApiV1(body);
+        if (body.queryResult && body.intent)
+            return this.parseApiV2(body);
+        throw Error("Request version not detected");
+    }
+    parseApiV1(body) {
+        const data = { apiVersion: 1 };
         const internalData = new Map();
         let inputMethod = chatbotbase_1.InputMethod.text;
         body.result.contexts.forEach(context => {
@@ -63,6 +70,61 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             internalData.set('location', body.originalRequest.data.device.location);
         }
         return new DialogflowInput(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest && body.originalRequest.data.user.accessToken || null, internalData);
+    }
+    parseApiV2(body) {
+        const data = { apiVersion: 2 };
+        const internalData = new Map();
+        let inputMethod = chatbotbase_1.InputMethod.text;
+        body.queryResult.outputContexts.forEach(context => {
+            const contextName = context.name.replace(`${body.session}/`, '');
+            if (context.parameters && context.parameters.boxed) {
+                data[contextName] = context.parameters.value;
+            }
+            else {
+                data[contextName] = context.parameters;
+            }
+        });
+        let platform, text, userId;
+        if (body.originalDetectIntentRequest && body.originalDetectIntentRequest.source === 'google') {
+            const capabilities = body.originalDetectIntentRequest.payload.surface.capabilities;
+            platform = 'Google Home';
+            for (let i = 0; i < capabilities.length; i++) {
+                if (capabilities[i].name === 'actions.capability.SCREEN_OUTPUT') {
+                    platform = 'Google Assistant';
+                    break;
+                }
+            }
+            userId = body.originalDetectIntentRequest.payload.user.userId || body.originalDetectIntentRequest.payload.user.idToken;
+            body.originalDetectIntentRequest.payload.inputs.forEach(input => {
+                if (input.rawInputs) {
+                    input.rawInputs.forEach(rawInput => {
+                        if (rawInput.query) {
+                            text = rawInput.query;
+                            switch (rawInput.inputType) {
+                                case 'VOICE':
+                                    inputMethod = chatbotbase_1.InputMethod.voice;
+                                    break;
+                                case 'KEYBOARD':
+                                    inputMethod = chatbotbase_1.InputMethod.text;
+                                    break;
+                                case 'TOUCH':
+                                    inputMethod = chatbotbase_1.InputMethod.touch;
+                                    break;
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        else {
+            platform = 'Dialogflow';
+            text = body.queryResult.queryText;
+            userId = 'unknown';
+        }
+        if (body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.device && body.originalDetectIntentRequest.payload.device.location) {
+            internalData.set('location', body.originalDetectIntentRequest.payload.device.location);
+        }
+        return new DialogflowInput(body.responseId, userId, body.session, body.queryResult.languageCode, platform, new Date(), body.queryResult.intent.displayName, inputMethod, text, data, body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null, internalData);
     }
     render(output) {
         let ssml, displayText, richMessages = [], suggestions = [], context = [], messages = [];
@@ -149,27 +211,50 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             }
         });
         messages.push(dialogflowSuggestions);
-        return {
-            speech: `<speak>${ssml}</speak>`,
-            displayText,
-            data: {
-                google: {
-                    expectUserResponse: output.expectAnswer,
-                    noInputPrompts: [],
-                    richResponse: {
-                        items: richMessages,
-                        suggestions
+        switch (output.data.apiVersion) {
+            case 1:
+                return {
+                    speech: `<speak>${ssml}</speak>`,
+                    displayText,
+                    data: {
+                        google: {
+                            expectUserResponse: output.expectAnswer,
+                            noInputPrompts: [],
+                            richResponse: {
+                                items: richMessages,
+                                suggestions
+                            },
+                            systemIntent
+                        }
                     },
-                    systemIntent
-                }
-            },
-            messages,
-            contextOut: context,
-            source: 'ChatbotBase'
-        };
+                    messages,
+                    contextOut: context,
+                    source: 'ChatbotBase'
+                };
+            case 2:
+                return {
+                    fulfillmentText: displayText,
+                    payload: {
+                        google: {
+                            expectUserResponse: output.expectAnswer,
+                            noInputPrompts: [],
+                            richResponse: {
+                                items: richMessages,
+                                suggestions
+                            },
+                            systemIntent
+                        }
+                    },
+                    fulfillmentMessages: messages,
+                    outputContexts: context,
+                    source: 'ChatbotBase'
+                };
+            default:
+                throw Error("Cannot find out correct output format");
+        }
     }
     isSupported(json) {
-        return json.hasOwnProperty('originalRequest') || (json.result && json.result.source);
+        return (json.result && json.result.source) || (json.queryResult && json.intent);
     }
     requestPermission(reason, permissions) {
         let permissionList;
@@ -238,6 +323,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             debug: () => 'Login request'
         };
     }
+    /**
+     * Creates a simple response where the spoken text is equal to the shown text.
+     * @param message the message the user should read and hear.
+     */
     static simpleReply(message) {
         return {
             platform: 'Dialogflow',
@@ -253,63 +342,57 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             debug: () => message
         };
     }
-    static basicCard(title, message, buttons) {
+    /**
+     * Creates a basic card holds a title, a messages and optional a button.
+     * @param title The title of the card.
+     * @param message The message of the card.
+     * @param button The button which should be shown (optional).
+     */
+    static basicCard(title, message, button) {
         return {
             platform: 'Dialogflow',
             type: 'basicCard',
             render: () => {
                 return {
                     basicCard: {
-                        title: title,
+                        title,
                         formattedText: message,
-                        buttons: typeof buttons === 'object' ? [buttons.render()] : []
+                        buttons: typeof button === 'object' ? [button.render()] : []
                     }
                 };
             },
-            debug: () => message
+            debug: () => `${title}: ${message}`
         };
     }
-    static basicCardWithPicture(title, message, imageUrl, accessibilityText = '', imageDisplayOptions = ImageDisplays.DEFAULT, buttons) {
+    /**
+     * Creates a basic card with an image a title, a messages and optional a button.
+     * @param title The title of the card.
+     * @param message The message of the card.
+     * @param imageUrl The url of the image to show.
+     * @param accessibilityText The accessibility text for the image.
+     * @param imageDisplayOptions The image display options, by default DEFAULT.
+     * @param button The button which should be shown (optional).
+     */
+    // FIXME if there is an image the title and text is optional
+    static basicCardWithPicture(title, message, imageUrl, accessibilityText, imageDisplayOptions = ImageDisplays.DEFAULT, button) {
         return {
             platform: 'Dialogflow',
             type: 'basicCard',
             render: () => {
                 return {
                     basicCard: {
-                        title: title,
+                        title,
                         formattedText: message,
                         image: {
                             url: imageUrl,
                             accessibilityText: accessibilityText
                         },
-                        buttons: typeof buttons === 'object' ? [buttons.render()] : [],
+                        buttons: typeof button === 'object' ? [button.render()] : [],
                         imageDisplayOptions: imageDisplayOptions
                     }
                 };
             },
             debug: () => message
-        };
-    }
-    static imageCard(title, message, imageUrl, contentDescription, buttons) {
-        return {
-            platform: 'Dialogflow',
-            type: 'basicCard',
-            render: () => {
-                return {
-                    basicCard: {
-                        title: title,
-                        formattedText: message,
-                        image: {
-                            url: imageUrl,
-                            accessibility_text: contentDescription
-                        },
-                        buttons: typeof buttons === 'object' ? [buttons.render()] : [],
-                        imageDisplayOptions: 'CROPPED'
-                        // https://github.com/actions-on-google/actions-on-google-nodejs/commit/72dfe485797804e0be921d31822a7fa71234bce7
-                    }
-                };
-            },
-            debug: () => `Dialog with title "${title}" and message "${message}".`
         };
     }
     static suggestion(suggestion) {
@@ -345,6 +428,26 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             return input.data.get('location');
         }
         return null;
+    }
+    /**
+     * Defines a
+     * @param ssml
+     * @param displayText
+     */
+    static splittedSimpleReply(ssml, displayText) {
+        return {
+            platform: 'Dialogflow',
+            type: 'simpleMessage',
+            render: () => {
+                return {
+                    simpleResponse: {
+                        textToSpeech: `<speak>${ssml}</speak>`,
+                        displayText
+                    }
+                };
+            },
+            debug: () => displayText
+        };
     }
 }
 exports.Dialogflow = Dialogflow;
@@ -424,6 +527,18 @@ exports.ActionsOnGoogleCoordinates = ActionsOnGoogleCoordinates;
 class DialogflowInput extends chatbotbase_1.Input {
     constructor(id, userId, sessionId, language, platform, time, intent, inputMethod, message, context, accessToken, data) {
         super(id, userId, sessionId, language, platform, time, intent, inputMethod, message, context, accessToken);
+        this.data = data;
+    }
+    reply() {
+        return new chatbotbase_1.Output(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context);
+    }
+}
+/**
+ * Private extended model to store metadata of an input.
+ */
+class DialogflowOutput extends chatbotbase_1.Output {
+    constructor(id, userId, sessionId, platform, language, intent, message, context, data) {
+        super(id, userId, sessionId, language, platform, new Date(), intent, chatbotbase_1.InputMethod.text, message, context);
         this.data = data;
     }
 }

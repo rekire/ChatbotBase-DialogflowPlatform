@@ -8,7 +8,13 @@ export class Dialogflow extends VoicePlatform {
 
     parse(body: any): Input {
         console.log('INPUT', body);
-        const data: Context = {};
+        if(body.result && body.result.source) return this.parseApiV1(body);
+        if(body.queryResult && body.intent) return this.parseApiV2(body);
+        throw Error("Request version not detected");
+    }
+
+    private parseApiV1(body): Input {
+        const data: Context = {apiVersion: 1};
         const internalData = new Map<string, any>();
         let inputMethod = InputMethod.text;
         body.result.contexts.forEach(context => {
@@ -72,6 +78,72 @@ export class Dialogflow extends VoicePlatform {
             text,
             data,
             body.originalRequest && body.originalRequest.data.user.accessToken || null,
+            internalData);
+    }
+
+    private parseApiV2(body): Input {
+        const data: Context = {apiVersion: 2};
+        const internalData = new Map<string, any>();
+        let inputMethod = InputMethod.text;
+        body.queryResult.outputContexts.forEach(context => {
+            const contextName = context.name.replace(`${body.session}/`, '');
+            if(context.parameters && context.parameters.boxed) {
+                data[contextName] = context.parameters.value
+            } else {
+                data[contextName] = context.parameters
+            }
+        });
+        let platform, text, userId;
+        if(body.originalDetectIntentRequest && body.originalDetectIntentRequest.source === 'google') {
+            const capabilities = body.originalDetectIntentRequest.payload.surface.capabilities;
+            platform = 'Google Home';
+            for(let i = 0; i < capabilities.length; i++) {
+                if(capabilities[i].name === 'actions.capability.SCREEN_OUTPUT') {
+                    platform = 'Google Assistant';
+                    break;
+                }
+            }
+            userId = body.originalDetectIntentRequest.payload.user.userId || body.originalDetectIntentRequest.payload.user.idToken;
+            body.originalDetectIntentRequest.payload.inputs.forEach(input => {
+                if(input.rawInputs) {
+                    input.rawInputs.forEach(rawInput => {
+                        if(rawInput.query) {
+                            text = rawInput.query;
+                            switch(rawInput.inputType) {
+                            case 'VOICE':
+                                inputMethod = InputMethod.voice;
+                                break;
+                            case 'KEYBOARD':
+                                inputMethod = InputMethod.text;
+                                break;
+                            case 'TOUCH':
+                                inputMethod = InputMethod.touch;
+                                break;
+                            }
+                        }
+                    });
+                }
+            });
+        } else {
+            platform = 'Dialogflow';
+            text = body.queryResult.queryText;
+            userId = 'unknown';
+        }
+        if(body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.device && body.originalDetectIntentRequest.payload.device.location) {
+            internalData.set('location', body.originalDetectIntentRequest.payload.device.location);
+        }
+        return new DialogflowInput(
+            body.responseId,
+            userId,
+            body.session,
+            body.queryResult.languageCode,
+            platform,
+            new Date(),
+            body.queryResult.intent.displayName,
+            inputMethod,
+            text,
+            data,
+            body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null,
             internalData);
     }
 
@@ -153,28 +225,51 @@ export class Dialogflow extends VoicePlatform {
             }
         });
         messages.push(dialogflowSuggestions);
-        return {
-            speech: `<speak>${ssml}</speak>`,
-            displayText,
-            data: {
-                google: {
-                    expectUserResponse: output.expectAnswer,
-                    noInputPrompts: [],
-                    richResponse: {
-                        items: richMessages,
-                        suggestions
-                    },
-                    systemIntent
-                }
-            },
-            messages,
-            contextOut: context,
-            source: 'ChatbotBase'
-        };
+        switch(output.data.apiVersion) {
+        case 1:
+            return {
+                speech: `<speak>${ssml}</speak>`,
+                displayText,
+                data: {
+                    google: {
+                        expectUserResponse: output.expectAnswer,
+                        noInputPrompts: [],
+                        richResponse: {
+                            items: richMessages,
+                            suggestions
+                        },
+                        systemIntent
+                    }
+                },
+                messages,
+                contextOut: context,
+                source: 'ChatbotBase'
+            };
+        case 2:
+            return {
+                fulfillmentText: displayText,
+                payload: {
+                    google: {
+                        expectUserResponse: output.expectAnswer,
+                        noInputPrompts: [],
+                        richResponse: {
+                            items: richMessages,
+                            suggestions
+                        },
+                        systemIntent
+                    }
+                },
+                fulfillmentMessages: messages,
+                outputContexts: context,
+                source: 'ChatbotBase'
+            };
+        default:
+            throw Error("Cannot find out correct output format");
+        }
     }
 
     isSupported(json: any) {
-        return json.hasOwnProperty('originalRequest') || (json.result && json.result.source)
+        return (json.result && json.result.source) || (json.queryResult && json.intent)
     }
 
     requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined {
@@ -244,6 +339,10 @@ export class Dialogflow extends VoicePlatform {
         };
     }
 
+    /**
+     * Creates a simple response where the spoken text is equal to the shown text.
+     * @param message the message the user should read and hear.
+     */
     static simpleReply(message: string): Reply {
         return {
             platform: 'Dialogflow',
@@ -260,65 +359,58 @@ export class Dialogflow extends VoicePlatform {
         };
     }
 
-    static basicCard(title: string, message: string, buttons?: DialogflowButton): Reply {
+    /**
+     * Creates a basic card holds a title, a messages and optional a button.
+     * @param title The title of the card.
+     * @param message The message of the card.
+     * @param button The button which should be shown (optional).
+     */
+    static basicCard(title: string, message: string, button?: DialogflowButton): Reply {
         return {
             platform: 'Dialogflow',
             type: 'basicCard',
             render: () => {
                 return {
                     basicCard: {
-                        title: title,
+                        title,
                         formattedText: message,
-                        buttons: typeof buttons === 'object' ? [buttons.render()] : []
+                        buttons: typeof button === 'object' ? [button.render()] : []
                     }
                 }
             },
-            debug: () => message
+            debug: () => `${title}: ${message}`
         };
     }
 
-    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string = '', imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, buttons?: DialogflowButton): Reply {
+    /**
+     * Creates a basic card with an image a title, a messages and optional a button.
+     * @param title The title of the card.
+     * @param message The message of the card.
+     * @param imageUrl The url of the image to show.
+     * @param accessibilityText The accessibility text for the image.
+     * @param imageDisplayOptions The image display options, by default DEFAULT.
+     * @param button The button which should be shown (optional).
+     */
+    // FIXME if there is an image the title and text is optional
+    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string, imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, button?: DialogflowButton): Reply {
         return {
             platform: 'Dialogflow',
             type: 'basicCard',
             render: () => {
                 return {
                     basicCard: {
-                        title: title,
+                        title,
                         formattedText: message,
                         image: {
                             url: imageUrl,
                             accessibilityText: accessibilityText
                         },
-                        buttons: typeof buttons === 'object' ? [buttons.render()] : [],
+                        buttons: typeof button === 'object' ? [button.render()] : [],
                         imageDisplayOptions: imageDisplayOptions
                     }
                 }
             },
             debug: () => message
-        };
-    }
-
-    static imageCard(title: string, message: string, imageUrl: string, contentDescription?: string, buttons?: DialogflowButton): Reply {
-        return {
-            platform: 'Dialogflow',
-            type: 'basicCard',
-            render: () => {
-                return {
-                    basicCard: {
-                        title: title,
-                        formattedText: message,
-                        image: {
-                            url: imageUrl,
-                            accessibility_text: contentDescription
-                        },
-                        buttons: typeof buttons === 'object' ? [buttons.render()] : [],
-                        imageDisplayOptions: 'CROPPED'
-                        // https://github.com/actions-on-google/actions-on-google-nodejs/commit/72dfe485797804e0be921d31822a7fa71234bce7
-                    }
-                }
-            },
-            debug: () => `Dialog with title "${title}" and message "${message}".`
         };
     }
 
@@ -357,6 +449,27 @@ export class Dialogflow extends VoicePlatform {
             return input.data.get('location');
         }
         return null;
+    }
+
+    /**
+     * Defines a
+     * @param ssml
+     * @param displayText
+     */
+    static splittedSimpleReply(ssml: string, displayText: string): Reply {
+        return {
+            platform: 'Dialogflow',
+            type: 'simpleMessage',
+            render: () => {
+                return {
+                    simpleResponse: {
+                        textToSpeech: `<speak>${ssml}</speak>`,
+                        displayText
+                    }
+                };
+            },
+            debug: () => displayText
+        };
     }
 }
 
@@ -467,6 +580,33 @@ class DialogflowInput extends Input {
                 accessToken: string,
                 data: Map<string, any>) {
         super(id, userId, sessionId, language, platform, time, intent, inputMethod, message, context, accessToken);
+        this.data = data;
+    }
+
+    reply(): Output {
+        return new Output(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context)
+    }
+}
+
+/**
+ * Private extended model to store metadata of an input.
+ */
+class DialogflowOutput extends Output {
+    /**
+     * Private internal data
+     */
+    data: Map<string, any>;
+
+    constructor(id: string,
+                userId: string,
+                sessionId: string,
+                platform: string,
+                language: string,
+                intent: string,
+                message: string,
+                context: Context,
+                data: Map<string, any>) {
+        super(id, userId, sessionId, language, platform, new Date(), intent, InputMethod.text, message, context);
         this.data = data;
     }
 }
