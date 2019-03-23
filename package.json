@@ -1,7 +1,7 @@
 {
   "name": "chatbotbase-dialogflowplatform",
-  "version": "0.3.4",
-  "description": "The platform implementation for Dialogflow (v1) for ChatbotBase",
+  "version": "1.0.0",
+  "description": "The platform implementation for Dialogflow (v1 and v2) for ChatbotBase",
   "main": "Dialogflow.js",
   "types": "Dialogflow.d.ts",
   "scripts": {
@@ -13,7 +13,13 @@
   },
   "keywords": [
     "chatbotbase",
-    "dialogflow"
+    "dialogflow",
+    "actions-on-google",
+    "google-home",
+    "google-assistant",
+    "voice-assistant",
+    "voice-app",
+    "voice-application"
   ],
   "author": "René Kilczan <npm@reki.re>",
   "license": "Apache-2.0",
@@ -22,9 +28,9 @@
   },
   "homepage": "https://github.com/rekire/ChatbotBase-DialogflowPlatform#readme",
   "dependencies": {
-    "chatbotbase": "^0.6.4"
+    "chatbotbase": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^8.10.1"
+    "typescript": "^3.3.3333"
   }
 }
