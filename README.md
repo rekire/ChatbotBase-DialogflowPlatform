@@ -1,8 +1,8 @@
 # Dialogflow platform for ChatbotBase
-The platform implementation for Dialogflow (v1) for [ChatbotBase][chatbotbase]
+The platform implementation for Dialogflow (v1 and v2) for [ChatbotBase][chatbotbase].
 
-  [![NPM Version][npm-image]][npm-url]
-  [![NPM Downloads][downloads-image]][downloads-url]
+[![NPM Version][npm-image]][npm-url]
+[![NPM Downloads][downloads-image]][downloads-url]
   
 ## Features
  - Simple response: Speak out the given text
@@ -16,7 +16,7 @@ The platform implementation for Dialogflow (v1) for [ChatbotBase][chatbotbase]
  - Location requests
   
 ## License
-  [Apache 2.0](LICENSE)
+[Apache 2.0](LICENSE)
 
 [chatbotbase]: https://github.com/rekire/ChatbotBase
 [npm-image]: https://img.shields.io/npm/v/chatbotbase-dialogflowplatform.svg
