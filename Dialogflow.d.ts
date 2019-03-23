@@ -1,10 +1,17 @@
-import { Input, Reply, VoicePlatform, Suggestion, Output, VoicePermission } from 'chatbotbase';
+import { Input, Output, Reply, Suggestion, VoicePermission, VoicePlatform } from 'chatbotbase';
 export declare class Dialogflow extends VoicePlatform {
     platformId(): string;
     parse(body: any): Input;
     render(output: Output): any;
     isSupported(json: any): any;
     requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined;
+    /**
+     * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
+     * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
+     * and only if the login is not set as mandatory in the Actions on Google console.
+     * @returns {boolean} true if it is possible to request the login.
+     */
+    static requestLogin(): Reply;
     static simpleReply(message: string): Reply;
     static basicCard(title: string, message: string, buttons?: DialogflowButton): Reply;
     static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText?: string, imageDisplayOptions?: ImageDisplays, buttons?: DialogflowButton): Reply;
@@ -55,7 +62,7 @@ export declare enum ImageDisplays {
     /**
      * Image is centered and resized so the image fits perfectly in the container.
      */
-    CROPPED = "CROPPED",
+    CROPPED = "CROPPED"
 }
 /**
  * The location of a user as reported by Actions on Google.

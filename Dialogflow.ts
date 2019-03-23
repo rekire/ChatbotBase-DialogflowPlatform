@@ -1,4 +1,4 @@
-import {Input, Reply, InputMethod, VoicePlatform, Suggestion, Context, Output, VoicePermission} from 'chatbotbase';
+import {Context, Input, InputMethod, Output, Reply, Suggestion, VoicePermission, VoicePlatform} from 'chatbotbase';
 
 // TODO split the logic since this is just partially supporting Dialogflow (in fact just Actions on Google)
 export class Dialogflow extends VoicePlatform {
@@ -12,7 +12,7 @@ export class Dialogflow extends VoicePlatform {
         const internalData = new Map<string, any>();
         let inputMethod = InputMethod.text;
         body.result.contexts.forEach(context => {
-            if(context.parameters && context.parameters.boxed === true) {
+            if(context.parameters && context.parameters.boxed) {
                 data[context.name] = context.parameters.value
             } else {
                 data[context.name] = context.parameters
@@ -57,7 +57,7 @@ export class Dialogflow extends VoicePlatform {
             text = body.result.resolvedQuery;
             userId = 'unknown';
         }
-        if(body.originalRequest.data.device && body.originalRequest.data.device.location) {
+        if(body.originalRequest && body.originalRequest.data.device && body.originalRequest.data.device.location) {
             internalData.set('location', body.originalRequest.data.device.location);
         }
         return new DialogflowInput(
@@ -71,7 +71,7 @@ export class Dialogflow extends VoicePlatform {
             inputMethod,
             text,
             data,
-            body.originalRequest.data.user.accessToken,
+            body.originalRequest && body.originalRequest.data.user.accessToken || null,
             internalData);
     }
 
@@ -89,8 +89,7 @@ export class Dialogflow extends VoicePlatform {
             } else if(reply.platform === 'Dialogflow') {
                 if(reply.type === 'simpleMessage') {
                     hasSimpleMessage = true;
-                }
-                if(reply.type === 'listCard') {
+                } else if(reply.type === 'listCard') {
                     messages.push(reply.render());
                 } else {
                     richMessages.push(reply.render());
@@ -127,6 +126,9 @@ export class Dialogflow extends VoicePlatform {
         displayText = displayText || '';
         ssml = ssml || displayText.replace(/<[^>]+>/g, '');
         displayText = displayText || ssml.replace(/<[^>]+>/g, '');
+        if(ssml.indexOf("<") >= 0) {
+            ssml = `<speak>${ssml}</speak>`;
+        }
         // add the display response if there is no explicit simple response
         if(!hasSimpleMessage) {
             // insert at front
@@ -221,8 +223,29 @@ export class Dialogflow extends VoicePlatform {
         };
     }
 
+    /**
+     * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
+     * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
+     * and only if the login is not set as mandatory in the Actions on Google console.
+     * @returns {boolean} true if it is possible to request the login.
+     */
+    static requestLogin(): Reply {
+        // ref: https://developers.google.com/actions/identity/account-linking#json
+        return {
+            platform: 'ActionsOnGoogle',
+            type: 'system_intent',
+            render: () => {
+                return {
+                    intent: 'actions.intent.SIGN_IN',
+                    data: {}
+                }
+            },
+            debug: () => 'Login request'
+        };
+    }
+
     static simpleReply(message: string): Reply {
-        return <Reply>{
+        return {
             platform: 'Dialogflow',
             type: 'simpleMessage',
             render: () => {

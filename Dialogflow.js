@@ -12,7 +12,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         const internalData = new Map();
         let inputMethod = chatbotbase_1.InputMethod.text;
         body.result.contexts.forEach(context => {
-            if (context.parameters && context.parameters.boxed === true) {
+            if (context.parameters && context.parameters.boxed) {
                 data[context.name] = context.parameters.value;
             }
             else {
@@ -59,10 +59,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             text = body.result.resolvedQuery;
             userId = 'unknown';
         }
-        if (body.originalRequest.data.device && body.originalRequest.data.device.location) {
+        if (body.originalRequest && body.originalRequest.data.device && body.originalRequest.data.device.location) {
             internalData.set('location', body.originalRequest.data.device.location);
         }
-        return new DialogflowInput(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest.data.user.accessToken, internalData);
+        return new DialogflowInput(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest && body.originalRequest.data.user.accessToken || null, internalData);
     }
     render(output) {
         let ssml, displayText, richMessages = [], suggestions = [], context = [], messages = [];
@@ -81,7 +81,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 if (reply.type === 'simpleMessage') {
                     hasSimpleMessage = true;
                 }
-                if (reply.type === 'listCard') {
+                else if (reply.type === 'listCard') {
                     messages.push(reply.render());
                 }
                 else {
@@ -122,6 +122,9 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         displayText = displayText || '';
         ssml = ssml || displayText.replace(/<[^>]+>/g, '');
         displayText = displayText || ssml.replace(/<[^>]+>/g, '');
+        if (ssml.indexOf("<") >= 0) {
+            ssml = `<speak>${ssml}</speak>`;
+        }
         // add the display response if there is no explicit simple response
         if (!hasSimpleMessage) {
             // insert at front
@@ -213,6 +216,26 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 };
             },
             debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
+        };
+    }
+    /**
+     * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
+     * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
+     * and only if the login is not set as mandatory in the Actions on Google console.
+     * @returns {boolean} true if it is possible to request the login.
+     */
+    static requestLogin() {
+        // ref: https://developers.google.com/actions/identity/account-linking#json
+        return {
+            platform: 'ActionsOnGoogle',
+            type: 'system_intent',
+            render: () => {
+                return {
+                    intent: 'actions.intent.SIGN_IN',
+                    data: {}
+                };
+            },
+            debug: () => 'Login request'
         };
     }
     static simpleReply(message) {
