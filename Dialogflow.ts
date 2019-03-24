@@ -9,13 +9,14 @@ export class Dialogflow extends VoicePlatform {
     parse(body: any): Input {
         console.log('INPUT', body);
         if(body.result && body.result.source) return this.parseApiV1(body);
-        if(body.queryResult && body.intent) return this.parseApiV2(body);
+        if(body.responseId && body.queryResult) return this.parseApiV2(body);
         throw Error("Request version not detected");
     }
 
     private parseApiV1(body): Input {
-        const data: Context = {apiVersion: 1};
+        const data: Context = {};
         const internalData = new Map<string, any>();
+        internalData.set('apiVersion', 1);
         let inputMethod = InputMethod.text;
         body.result.contexts.forEach(context => {
             if(context.parameters && context.parameters.boxed) {
@@ -77,16 +78,18 @@ export class Dialogflow extends VoicePlatform {
             inputMethod,
             text,
             data,
-            body.originalRequest && body.originalRequest.data.user.accessToken || null,
+            body.originalRequest && body.originalRequest.data && body.originalRequest.data.user && body.originalRequest.data.user.accessToken || null,
             internalData);
     }
 
     private parseApiV2(body): Input {
-        const data: Context = {apiVersion: 2};
+        const data: Context = {};
         const internalData = new Map<string, any>();
+        internalData.set('apiVersion', 2);
+        internalData.set('session', body.session);
         let inputMethod = InputMethod.text;
         body.queryResult.outputContexts.forEach(context => {
-            const contextName = context.name.replace(`${body.session}/`, '');
+            const contextName = context.name.replace(`${body.session}/contexts/`, '');
             if(context.parameters && context.parameters.boxed) {
                 data[contextName] = context.parameters.value
             } else {
@@ -161,6 +164,7 @@ export class Dialogflow extends VoicePlatform {
             } else if(reply.platform === 'Dialogflow') {
                 if(reply.type === 'simpleMessage') {
                     hasSimpleMessage = true;
+                    richMessages.push(reply.render());
                 } else if(reply.type === 'listCard') {
                     messages.push(reply.render());
                 } else {
@@ -192,7 +196,11 @@ export class Dialogflow extends VoicePlatform {
             if((typeof value) !== 'object') {
                 value = {value: value, boxed: true};
             }
-            context.push({name: key, lifespan: 60, parameters: value});
+            if(output.data.get('apiVersion') === 1) {
+                context.push({name: key, lifespan: 60, parameters: value});
+            } else {
+                context.push({name: key, lifespanCount: 60, parameters: value});
+            }
         }
         // Generate proper default values
         displayText = displayText || '';
@@ -213,20 +221,23 @@ export class Dialogflow extends VoicePlatform {
             richMessages.forEach(msg => newList.push(msg));
             richMessages = newList
         }
-        // add the plain response for dialogflow
-        messages.push([{type: 0, speech: displayText}]);
-        const dialogflowSuggestions = {
-            type: 2,
-            replies: <any>[]
-        };
-        output.suggestions.forEach(suggestion => {
-            if(suggestion.platform === '*') {
-                dialogflowSuggestions.replies.push(suggestion.render())
-            }
-        });
-        messages.push(dialogflowSuggestions);
-        switch(output.data.apiVersion) {
+        if(!output.expectAnswer) {
+            suggestions = null;
+        }
+        switch(output.data.get('apiVersion')) {
         case 1:
+            // add the plain response for dialogflow
+            messages.push([{type: 0, speech: displayText}]);
+            const dialogflowV1Suggestions = {
+                type: 2,
+                replies: <any>[]
+            };
+            output.suggestions.forEach(suggestion => {
+                if(suggestion.platform === '*') {
+                    dialogflowV1Suggestions.replies.push(suggestion.render())
+                }
+            });
+            messages.push(dialogflowV1Suggestions);
             return {
                 speech: `<speak>${ssml}</speak>`,
                 displayText,
@@ -246,6 +257,29 @@ export class Dialogflow extends VoicePlatform {
                 source: 'ChatbotBase'
             };
         case 2:
+            // add the plain response for dialogflow
+            messages.push([{
+                platform: "ACTIONS_ON_GOOGLE",
+                text: {
+                    text: displayText
+                }
+            }]);
+            const dialogflowV2Suggestions = {
+                platform: "ACTIONS_ON_GOOGLE",
+                quickReplies: {
+                    //title: "quick replies title",
+                    quickReplies: <any>[]
+                }
+            };
+            output.suggestions.forEach(suggestion => {
+                if(suggestion.platform === '*') {
+                    dialogflowV2Suggestions.quickReplies.quickReplies.push(suggestion.render())
+                }
+            });
+            messages.push(dialogflowV2Suggestions);
+
+            // add prefix to each context
+            context.forEach(item => item.name = `${output.data.get('session')}/contexts/${item.name}`);
             return {
                 fulfillmentText: displayText,
                 payload: {
@@ -269,7 +303,7 @@ export class Dialogflow extends VoicePlatform {
     }
 
     isSupported(json: any) {
-        return (json.result && json.result.source) || (json.queryResult && json.intent)
+        return (json.result && json.result.source) || (json.responseId && json.queryResult)
     }
 
     requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined {
@@ -584,7 +618,7 @@ class DialogflowInput extends Input {
     }
 
     reply(): Output {
-        return new Output(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context)
+        return new DialogflowOutput(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context, this.data)
     }
 }
 
@@ -606,7 +640,7 @@ class DialogflowOutput extends Output {
                 message: string,
                 context: Context,
                 data: Map<string, any>) {
-        super(id, userId, sessionId, language, platform, new Date(), intent, InputMethod.text, message, context);
+        super(id, userId, sessionId, platform, language, intent, message, context);
         this.data = data;
     }
 }

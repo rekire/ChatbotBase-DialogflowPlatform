@@ -10,13 +10,14 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         console.log('INPUT', body);
         if (body.result && body.result.source)
             return this.parseApiV1(body);
-        if (body.queryResult && body.intent)
+        if (body.responseId && body.queryResult)
             return this.parseApiV2(body);
         throw Error("Request version not detected");
     }
     parseApiV1(body) {
-        const data = { apiVersion: 1 };
+        const data = {};
         const internalData = new Map();
+        internalData.set('apiVersion', 1);
         let inputMethod = chatbotbase_1.InputMethod.text;
         body.result.contexts.forEach(context => {
             if (context.parameters && context.parameters.boxed) {
@@ -69,14 +70,16 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         if (body.originalRequest && body.originalRequest.data.device && body.originalRequest.data.device.location) {
             internalData.set('location', body.originalRequest.data.device.location);
         }
-        return new DialogflowInput(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest && body.originalRequest.data.user.accessToken || null, internalData);
+        return new DialogflowInput(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest && body.originalRequest.data && body.originalRequest.data.user && body.originalRequest.data.user.accessToken || null, internalData);
     }
     parseApiV2(body) {
-        const data = { apiVersion: 2 };
+        const data = {};
         const internalData = new Map();
+        internalData.set('apiVersion', 2);
+        internalData.set('session', body.session);
         let inputMethod = chatbotbase_1.InputMethod.text;
         body.queryResult.outputContexts.forEach(context => {
-            const contextName = context.name.replace(`${body.session}/`, '');
+            const contextName = context.name.replace(`${body.session}/contexts/`, '');
             if (context.parameters && context.parameters.boxed) {
                 data[contextName] = context.parameters.value;
             }
@@ -142,6 +145,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             else if (reply.platform === 'Dialogflow') {
                 if (reply.type === 'simpleMessage') {
                     hasSimpleMessage = true;
+                    richMessages.push(reply.render());
                 }
                 else if (reply.type === 'listCard') {
                     messages.push(reply.render());
@@ -178,7 +182,12 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             if ((typeof value) !== 'object') {
                 value = { value: value, boxed: true };
             }
-            context.push({ name: key, lifespan: 60, parameters: value });
+            if (output.data.get('apiVersion') === 1) {
+                context.push({ name: key, lifespan: 60, parameters: value });
+            }
+            else {
+                context.push({ name: key, lifespanCount: 60, parameters: value });
+            }
         }
         // Generate proper default values
         displayText = displayText || '';
@@ -199,20 +208,23 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             richMessages.forEach(msg => newList.push(msg));
             richMessages = newList;
         }
-        // add the plain response for dialogflow
-        messages.push([{ type: 0, speech: displayText }]);
-        const dialogflowSuggestions = {
-            type: 2,
-            replies: []
-        };
-        output.suggestions.forEach(suggestion => {
-            if (suggestion.platform === '*') {
-                dialogflowSuggestions.replies.push(suggestion.render());
-            }
-        });
-        messages.push(dialogflowSuggestions);
-        switch (output.data.apiVersion) {
+        if (!output.expectAnswer) {
+            suggestions = null;
+        }
+        switch (output.data.get('apiVersion')) {
             case 1:
+                // add the plain response for dialogflow
+                messages.push([{ type: 0, speech: displayText }]);
+                const dialogflowV1Suggestions = {
+                    type: 2,
+                    replies: []
+                };
+                output.suggestions.forEach(suggestion => {
+                    if (suggestion.platform === '*') {
+                        dialogflowV1Suggestions.replies.push(suggestion.render());
+                    }
+                });
+                messages.push(dialogflowV1Suggestions);
                 return {
                     speech: `<speak>${ssml}</speak>`,
                     displayText,
@@ -232,6 +244,28 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     source: 'ChatbotBase'
                 };
             case 2:
+                // add the plain response for dialogflow
+                messages.push([{
+                        platform: "ACTIONS_ON_GOOGLE",
+                        text: {
+                            text: displayText
+                        }
+                    }]);
+                const dialogflowV2Suggestions = {
+                    platform: "ACTIONS_ON_GOOGLE",
+                    quickReplies: {
+                        //title: "quick replies title",
+                        quickReplies: []
+                    }
+                };
+                output.suggestions.forEach(suggestion => {
+                    if (suggestion.platform === '*') {
+                        dialogflowV2Suggestions.quickReplies.quickReplies.push(suggestion.render());
+                    }
+                });
+                messages.push(dialogflowV2Suggestions);
+                // add prefix to each context
+                context.forEach(item => item.name = `${output.data.get('session')}/contexts/${item.name}`);
                 return {
                     fulfillmentText: displayText,
                     payload: {
@@ -254,7 +288,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         }
     }
     isSupported(json) {
-        return (json.result && json.result.source) || (json.queryResult && json.intent);
+        return (json.result && json.result.source) || (json.responseId && json.queryResult);
     }
     requestPermission(reason, permissions) {
         let permissionList;
@@ -530,7 +564,7 @@ class DialogflowInput extends chatbotbase_1.Input {
         this.data = data;
     }
     reply() {
-        return new chatbotbase_1.Output(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context);
+        return new DialogflowOutput(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context, this.data);
     }
 }
 /**
@@ -538,7 +572,7 @@ class DialogflowInput extends chatbotbase_1.Input {
  */
 class DialogflowOutput extends chatbotbase_1.Output {
     constructor(id, userId, sessionId, platform, language, intent, message, context, data) {
-        super(id, userId, sessionId, language, platform, new Date(), intent, chatbotbase_1.InputMethod.text, message, context);
+        super(id, userId, sessionId, platform, language, intent, message, context);
         this.data = data;
     }
 }
