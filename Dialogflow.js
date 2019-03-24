@@ -129,6 +129,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         }
         return new DialogflowInput(body.responseId, userId, body.session, body.queryResult.languageCode, platform, new Date(), body.queryResult.intent.displayName, inputMethod, text, data, body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null, internalData);
     }
+    // TODO Find out why this is required
+    verify(request, response) {
+        return true;
+    }
     render(output) {
         let ssml, displayText, richMessages = [], suggestions = [], context = [], messages = [];
         let hasSimpleMessage = false;
@@ -343,7 +347,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
      * and only if the login is not set as mandatory in the Actions on Google console.
      * @returns {boolean} true if it is possible to request the login.
      */
-    static requestLogin() {
+    requestLogin() {
         // ref: https://developers.google.com/actions/identity/account-linking#json
         return {
             platform: 'ActionsOnGoogle',

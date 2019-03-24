@@ -1,4 +1,4 @@
-import {Context, Input, InputMethod, Output, Reply, Suggestion, VoicePermission, VoicePlatform} from 'chatbotbase';
+import {Context, Input, InputMethod, Output, Reply, Suggestion, VoicePermission, VoicePlatform, VerifyDataHolder} from 'chatbotbase';
 
 // TODO split the logic since this is just partially supporting Dialogflow (in fact just Actions on Google)
 export class Dialogflow extends VoicePlatform {
@@ -148,6 +148,11 @@ export class Dialogflow extends VoicePlatform {
             data,
             body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null,
             internalData);
+    }
+
+    // TODO Find out why this is required
+    verify(request: VerifyDataHolder, response: any): Promise<boolean> | boolean {
+        return true;
     }
 
     render(output: Output): any {
@@ -358,7 +363,7 @@ export class Dialogflow extends VoicePlatform {
      * and only if the login is not set as mandatory in the Actions on Google console.
      * @returns {boolean} true if it is possible to request the login.
      */
-    static requestLogin(): Reply {
+    requestLogin(): boolean | Reply {
         // ref: https://developers.google.com/actions/identity/account-linking#json
         return {
             platform: 'ActionsOnGoogle',

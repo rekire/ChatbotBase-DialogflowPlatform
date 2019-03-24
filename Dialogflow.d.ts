@@ -1,9 +1,10 @@
-import { Input, Output, Reply, Suggestion, VoicePermission, VoicePlatform } from 'chatbotbase';
+import { Input, Output, Reply, Suggestion, VoicePermission, VoicePlatform, VerifyDataHolder } from 'chatbotbase';
 export declare class Dialogflow extends VoicePlatform {
     platformId(): string;
     parse(body: any): Input;
     private parseApiV1;
     private parseApiV2;
+    verify(request: VerifyDataHolder, response: any): Promise<boolean> | boolean;
     render(output: Output): any;
     isSupported(json: any): any;
     requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined;
@@ -13,7 +14,7 @@ export declare class Dialogflow extends VoicePlatform {
      * and only if the login is not set as mandatory in the Actions on Google console.
      * @returns {boolean} true if it is possible to request the login.
      */
-    static requestLogin(): Reply;
+    requestLogin(): boolean | Reply;
     /**
      * Creates a simple response where the spoken text is equal to the shown text.
      * @param message the message the user should read and hear.
