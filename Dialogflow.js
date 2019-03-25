@@ -568,7 +568,8 @@ class DialogflowInput extends chatbotbase_1.Input {
         this.data = data;
     }
     reply() {
-        return new DialogflowOutput(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context, this.data);
+        const self = this;
+        return new DialogflowOutput(self.id + '.reply', self.userId, self.sessionId, self.platform, self.language, self.intent, "", self.context, this.data);
     }
 }
 /**

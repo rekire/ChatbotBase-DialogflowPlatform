@@ -623,7 +623,8 @@ class DialogflowInput extends Input {
     }
 
     reply(): Output {
-        return new DialogflowOutput(super.id + '.reply', super.userId, super.sessionId, super.platform, super.language, super.intent, "", super.context, this.data)
+        const self = <Output>this;
+        return new DialogflowOutput(self.id + '.reply', self.userId, self.sessionId, self.platform, self.language, self.intent, "", self.context, this.data)
     }
 }
 
