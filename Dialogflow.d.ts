@@ -1,4 +1,4 @@
-import { Input, Output, Reply, Suggestion, VoicePermission, VoicePlatform, VerifyDataHolder } from 'chatbotbase';
+import { Input, Output, VerifyDataHolder, VoicePlatform } from 'chatbotbase';
 export declare class Dialogflow extends VoicePlatform {
     platformId(): string;
     parse(body: any): Input;
@@ -7,46 +7,51 @@ export declare class Dialogflow extends VoicePlatform {
     verify(request: VerifyDataHolder, response: any): Promise<boolean> | boolean;
     render(output: Output): any;
     isSupported(json: any): any;
-    requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined;
-    /**
-     * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
-     * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
-     * and only if the login is not set as mandatory in the Actions on Google console.
-     * @returns {boolean} true if it is possible to request the login.
-     */
-    requestLogin(): boolean | Reply;
-    /**
-     * Creates a simple response where the spoken text is equal to the shown text.
-     * @param message the message the user should read and hear.
-     */
-    static simpleReply(message: string): Reply;
-    /**
-     * Creates a basic card holds a title, a messages and optional a button.
-     * @param title The title of the card.
-     * @param message The message of the card.
-     * @param button The button which should be shown (optional).
-     */
-    static basicCard(title: string, message: string, button?: DialogflowButton): Reply;
-    /**
-     * Creates a basic card with an image a title, a messages and optional a button.
-     * @param title The title of the card.
-     * @param message The message of the card.
-     * @param imageUrl The url of the image to show.
-     * @param accessibilityText The accessibility text for the image.
-     * @param imageDisplayOptions The image display options, by default DEFAULT.
-     * @param button The button which should be shown (optional).
-     */
-    static basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string, imageDisplayOptions?: ImageDisplays, button?: DialogflowButton): Reply;
-    static suggestion(suggestion: string): Suggestion;
-    static listResponse(cardTitle: string, list: ListItem[]): Reply;
     static getPosition(input: Input): ActionsOnGoogleLocation | null;
-    /**
-     * Defines a
-     * @param ssml
-     * @param displayText
-     */
-    static splittedSimpleReply(ssml: string, displayText: string): Reply;
 }
+declare type ReplyBuilder<T = {}> = new (...args: any[]) => T;
+export declare function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase): {
+    new (...args: any[]): {
+        requestPermission(reason: string, permissions: any): any;
+        /**
+         * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
+         * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
+         * and only if the login is not set as mandatory in the Actions on Google console.
+         * @returns {boolean} true if it is possible to request the login.
+         */
+        requestLogin(): any;
+        /**
+         * Creates a simple response where the spoken text is equal to the shown text.
+         * @param message the message the user should read and hear.
+         */
+        simpleReply(message: string): any;
+        /**
+         * Creates a basic card holds a title, a messages and optional a button.
+         * @param title The title of the card.
+         * @param message The message of the card.
+         * @param button The button which should be shown (optional).
+         */
+        basicCard(title: string, message: string, button?: DialogflowButton | undefined): any;
+        /**
+         * Creates a basic card with an image a title, a messages and optional a button.
+         * @param title The title of the card.
+         * @param message The message of the card.
+         * @param imageUrl The url of the image to show.
+         * @param accessibilityText The accessibility text for the image.
+         * @param imageDisplayOptions The image display options, by default DEFAULT.
+         * @param button The button which should be shown (optional).
+         */
+        basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string, imageDisplayOptions?: ImageDisplays, button?: DialogflowButton | undefined): any;
+        suggestion(suggestion: string): any;
+        listResponse(cardTitle: string, list: ListItem[]): any;
+        /**
+         * Defines a
+         * @param ssml
+         * @param displayText
+         */
+        splittedSimpleReply(ssml: string, displayText: string): any;
+    };
+} & TBase;
 export declare class DialogflowButton {
     private output;
     constructor(title: string, action: string);
@@ -107,3 +112,4 @@ export declare class ActionsOnGoogleCoordinates {
     latitude: number;
     longitude: number;
 }
+export {};

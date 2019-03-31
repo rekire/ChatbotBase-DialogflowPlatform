@@ -178,7 +178,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 suggestions.push(suggestion.render());
             }
             else if (suggestion.platform === '*') {
-                suggestions.push(Dialogflow.suggestion(suggestion.render()).render());
+                suggestions.push({ title: suggestion.render() });
             }
         });
         for (let key in output.context) {
@@ -294,201 +294,206 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
     isSupported(json) {
         return (json.result && json.result.source) || (json.responseId && json.queryResult);
     }
-    requestPermission(reason, permissions) {
-        let permissionList;
-        if (permissions instanceof Array) {
-            permissionList = permissions;
-        }
-        else {
-            permissionList = [permissions];
-        }
-        if (permissionList.length > 0)
-            return undefined;
-        const voicePermissions = [];
-        permissionList.forEach(permission => {
-            switch (permission) {
-                case chatbotbase_1.VoicePermission.ExactPosition:
-                    voicePermissions.push('DEVICE_PRECISE_LOCATION');
-                    break;
-                case chatbotbase_1.VoicePermission.RegionalPosition:
-                    voicePermissions.push('DEVICE_COARSE_LOCATION');
-                    break;
-                case chatbotbase_1.VoicePermission.UserName:
-                    voicePermissions.push('NAME');
-                    break;
-                //case VoicePermission.Push:
-                //    voicePermissions.push('UPDATE');
-                //    break;
-                case 'UPDATE':
-                case 'UNSPECIFIED_PERMISSION':
-                    voicePermissions.push(permission);
-                    break;
-                default:
-                    return undefined;
-            }
-        });
-        return {
-            platform: 'ActionsOnGoogle',
-            type: 'permission',
-            render: () => {
-                return {
-                    permission_value_spec: {
-                        opt_context: reason,
-                        permissions: voicePermissions
-                    }
-                };
-            },
-            debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
-        };
-    }
-    /**
-     * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
-     * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
-     * and only if the login is not set as mandatory in the Actions on Google console.
-     * @returns {boolean} true if it is possible to request the login.
-     */
-    requestLogin() {
-        // ref: https://developers.google.com/actions/identity/account-linking#json
-        return {
-            platform: 'ActionsOnGoogle',
-            type: 'system_intent',
-            render: () => {
-                return {
-                    intent: 'actions.intent.SIGN_IN',
-                    data: {}
-                };
-            },
-            debug: () => 'Login request'
-        };
-    }
-    /**
-     * Creates a simple response where the spoken text is equal to the shown text.
-     * @param message the message the user should read and hear.
-     */
-    static simpleReply(message) {
-        return {
-            platform: 'Dialogflow',
-            type: 'simpleMessage',
-            render: () => {
-                return {
-                    simpleResponse: {
-                        textToSpeech: message,
-                        displayText: message
-                    }
-                };
-            },
-            debug: () => message
-        };
-    }
-    /**
-     * Creates a basic card holds a title, a messages and optional a button.
-     * @param title The title of the card.
-     * @param message The message of the card.
-     * @param button The button which should be shown (optional).
-     */
-    static basicCard(title, message, button) {
-        return {
-            platform: 'Dialogflow',
-            type: 'basicCard',
-            render: () => {
-                return {
-                    basicCard: {
-                        title,
-                        formattedText: message,
-                        buttons: typeof button === 'object' ? [button.render()] : []
-                    }
-                };
-            },
-            debug: () => `${title}: ${message}`
-        };
-    }
-    /**
-     * Creates a basic card with an image a title, a messages and optional a button.
-     * @param title The title of the card.
-     * @param message The message of the card.
-     * @param imageUrl The url of the image to show.
-     * @param accessibilityText The accessibility text for the image.
-     * @param imageDisplayOptions The image display options, by default DEFAULT.
-     * @param button The button which should be shown (optional).
-     */
-    // FIXME if there is an image the title and text is optional
-    static basicCardWithPicture(title, message, imageUrl, accessibilityText, imageDisplayOptions = ImageDisplays.DEFAULT, button) {
-        return {
-            platform: 'Dialogflow',
-            type: 'basicCard',
-            render: () => {
-                return {
-                    basicCard: {
-                        title,
-                        formattedText: message,
-                        image: {
-                            url: imageUrl,
-                            accessibilityText: accessibilityText
-                        },
-                        buttons: typeof button === 'object' ? [button.render()] : [],
-                        imageDisplayOptions: imageDisplayOptions
-                    }
-                };
-            },
-            debug: () => message
-        };
-    }
-    static suggestion(suggestion) {
-        return {
-            platform: 'Dialogflow',
-            render: () => {
-                return {
-                    title: suggestion
-                };
-            },
-            toString: () => suggestion
-        };
-    }
-    static listResponse(cardTitle, list) {
-        const items = [];
-        list.forEach(item => items.push(item.render()));
-        return {
-            platform: 'Dialogflow',
-            type: 'listCard',
-            render: () => {
-                return {
-                    type: 'list_card',
-                    platform: 'google',
-                    title: cardTitle,
-                    items: items
-                };
-            },
-            debug: () => 'debug'
-        };
-    }
     static getPosition(input) {
         if (input instanceof DialogflowInput) {
             return input.data.get('location');
         }
         return null;
     }
-    /**
-     * Defines a
-     * @param ssml
-     * @param displayText
-     */
-    static splittedSimpleReply(ssml, displayText) {
-        return {
-            platform: 'Dialogflow',
-            type: 'simpleMessage',
-            render: () => {
-                return {
-                    simpleResponse: {
-                        textToSpeech: `<speak>${ssml}</speak>`,
-                        displayText
-                    }
-                };
-            },
-            debug: () => displayText
-        };
-    }
 }
 exports.Dialogflow = Dialogflow;
+function DialogflowReply(Base) {
+    return class extends Base {
+        requestPermission(reason, permissions) {
+            let permissionList;
+            if (permissions instanceof Array) {
+                permissionList = permissions;
+            }
+            else {
+                permissionList = [permissions];
+            }
+            if (permissionList.length > 0)
+                return undefined;
+            const voicePermissions = [];
+            permissionList.forEach(permission => {
+                switch (permission) {
+                    case chatbotbase_1.VoicePermission.ExactPosition:
+                        voicePermissions.push('DEVICE_PRECISE_LOCATION');
+                        break;
+                    case chatbotbase_1.VoicePermission.RegionalPosition:
+                        voicePermissions.push('DEVICE_COARSE_LOCATION');
+                        break;
+                    case chatbotbase_1.VoicePermission.UserName:
+                        voicePermissions.push('NAME');
+                        break;
+                    //case VoicePermission.Push:
+                    //    voicePermissions.push('UPDATE');
+                    //    break;
+                    case 'UPDATE':
+                    case 'UNSPECIFIED_PERMISSION':
+                        voicePermissions.push(permission);
+                        break;
+                    default:
+                        return undefined;
+                }
+            });
+            return {
+                platform: 'ActionsOnGoogle',
+                type: 'permission',
+                render: () => {
+                    return {
+                        permission_value_spec: {
+                            opt_context: reason,
+                            permissions: voicePermissions
+                        }
+                    };
+                },
+                debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
+            };
+        }
+        /**
+         * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
+         * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
+         * and only if the login is not set as mandatory in the Actions on Google console.
+         * @returns {boolean} true if it is possible to request the login.
+         */
+        requestLogin() {
+            // ref: https://developers.google.com/actions/identity/account-linking#json
+            return {
+                platform: 'ActionsOnGoogle',
+                type: 'system_intent',
+                render: () => {
+                    return {
+                        intent: 'actions.intent.SIGN_IN',
+                        data: {}
+                    };
+                },
+                debug: () => 'Login request'
+            };
+        }
+        /**
+         * Creates a simple response where the spoken text is equal to the shown text.
+         * @param message the message the user should read and hear.
+         */
+        simpleReply(message) {
+            return {
+                platform: 'Dialogflow',
+                type: 'simpleMessage',
+                render: () => {
+                    return {
+                        simpleResponse: {
+                            textToSpeech: message,
+                            displayText: message
+                        }
+                    };
+                },
+                debug: () => message
+            };
+        }
+        /**
+         * Creates a basic card holds a title, a messages and optional a button.
+         * @param title The title of the card.
+         * @param message The message of the card.
+         * @param button The button which should be shown (optional).
+         */
+        basicCard(title, message, button) {
+            return {
+                platform: 'Dialogflow',
+                type: 'basicCard',
+                render: () => {
+                    return {
+                        basicCard: {
+                            title,
+                            formattedText: message,
+                            buttons: typeof button === 'object' ? [button.render()] : []
+                        }
+                    };
+                },
+                debug: () => `${title}: ${message}`
+            };
+        }
+        /**
+         * Creates a basic card with an image a title, a messages and optional a button.
+         * @param title The title of the card.
+         * @param message The message of the card.
+         * @param imageUrl The url of the image to show.
+         * @param accessibilityText The accessibility text for the image.
+         * @param imageDisplayOptions The image display options, by default DEFAULT.
+         * @param button The button which should be shown (optional).
+         */
+        // FIXME if there is an image the title and text is optional
+        basicCardWithPicture(title, message, imageUrl, accessibilityText, imageDisplayOptions = ImageDisplays.DEFAULT, button) {
+            return {
+                platform: 'Dialogflow',
+                type: 'basicCard',
+                render: () => {
+                    return {
+                        basicCard: {
+                            title,
+                            formattedText: message,
+                            image: {
+                                url: imageUrl,
+                                accessibilityText: accessibilityText
+                            },
+                            buttons: typeof button === 'object' ? [button.render()] : [],
+                            imageDisplayOptions: imageDisplayOptions
+                        }
+                    };
+                },
+                debug: () => message
+            };
+        }
+        suggestion(suggestion) {
+            return {
+                platform: 'Dialogflow',
+                render: () => {
+                    return {
+                        title: suggestion
+                    };
+                },
+                toString: () => suggestion
+            };
+        }
+        listResponse(cardTitle, list) {
+            const items = [];
+            list.forEach(item => items.push(item.render()));
+            return {
+                platform: 'Dialogflow',
+                type: 'listCard',
+                render: () => {
+                    return {
+                        type: 'list_card',
+                        platform: 'google',
+                        title: cardTitle,
+                        items: items
+                    };
+                },
+                debug: () => 'debug'
+            };
+        }
+        /**
+         * Defines a
+         * @param ssml
+         * @param displayText
+         */
+        splittedSimpleReply(ssml, displayText) {
+            return {
+                platform: 'Dialogflow',
+                type: 'simpleMessage',
+                render: () => {
+                    return {
+                        simpleResponse: {
+                            textToSpeech: `<speak>${ssml}</speak>`,
+                            displayText
+                        }
+                    };
+                },
+                debug: () => displayText
+            };
+        }
+    };
+}
+exports.DialogflowReply = DialogflowReply;
 class DialogflowButton {
     constructor(title, action) {
         this.output = {
