@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const chatbotbase_1 = require("chatbotbase");
+const v4_1 = require("uuid/v4");
 // TODO split the logic since this is just partially supporting Dialogflow (in fact just Actions on Google)
 class Dialogflow extends chatbotbase_1.VoicePlatform {
     platformId() {
@@ -37,8 +38,12 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     break;
                 }
             }
-            //text = body.originalRequest.data.inputs[0].rawInputs[0].query;
-            userId = body.originalRequest.data.user.userId;
+            let storageUserId = null;
+            internalData.set('userStorage', body.originalRequest.payload.user.userStorage || "{}");
+            if (body.originalRequest.payload.user.userStorage) {
+                storageUserId = JSON.parse(body.originalRequest.payload.user.userStorage).userId;
+            }
+            userId = body.originalRequest.data.user.userId || storageUserId;
             const inputs = body.originalRequest.data.inputs;
             for (let i = 0; i < inputs.length; i++) {
                 if (inputs[i].rawInputs) {
@@ -97,7 +102,12 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     break;
                 }
             }
-            userId = body.originalDetectIntentRequest.payload.user.userId || body.originalDetectIntentRequest.payload.user.idToken;
+            let storageUserId = null;
+            internalData.set('userStorage', body.originalDetectIntentRequest.payload.user.userStorage || "{}");
+            if (body.originalRequest.payload.user.userStorage) {
+                storageUserId = JSON.parse(body.originalDetectIntentRequest.payload.user.userStorage).userId;
+            }
+            userId = body.originalDetectIntentRequest.payload.user.userId || storageUserId || v4_1.uuidv4();
             body.originalDetectIntentRequest.payload.inputs.forEach(input => {
                 if (input.rawInputs) {
                     input.rawInputs.forEach(rawInput => {
@@ -134,9 +144,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         return true;
     }
     render(output) {
-        let ssml, displayText, richMessages = [], suggestions = [], context = [], messages = [];
+        let ssml = "", displayText = "", richMessages = [], suggestions = [], context = [], messages = [];
         let hasSimpleMessage = false;
         let systemIntent = null;
+        const data = output.data;
         output.replies.forEach(reply => {
             if (reply.platform === '*') {
                 if (reply.type === 'ssml') {
@@ -186,7 +197,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             if ((typeof value) !== 'object') {
                 value = { value: value, boxed: true };
             }
-            if (output.data.get('apiVersion') === 1) {
+            if (data.get('apiVersion') === 1) {
                 context.push({ name: key, lifespan: 60, parameters: value });
             }
             else {
@@ -215,7 +226,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         if (!output.expectAnswer) {
             suggestions = null;
         }
-        switch (output.data.get('apiVersion')) {
+        const userStorageData = JSON.parse(data.get('userStorage'));
+        userStorageData.userId = output.userId;
+        let userStorage = JSON.stringify(userStorageData);
+        switch (data.get('apiVersion')) {
             case 1:
                 // add the plain response for dialogflow
                 messages.push([{ type: 0, speech: displayText }]);
@@ -240,7 +254,8 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                                 items: richMessages,
                                 suggestions
                             },
-                            systemIntent
+                            systemIntent,
+                            userStorage
                         }
                     },
                     messages,
@@ -269,7 +284,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 });
                 messages.push(dialogflowV2Suggestions);
                 // add prefix to each context
-                context.forEach(item => item.name = `${output.data.get('session')}/contexts/${item.name}`);
+                context.forEach(item => item.name = `${data.get('session')}/contexts/${item.name}`);
                 return {
                     fulfillmentText: displayText,
                     payload: {
@@ -280,7 +295,8 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                                 items: richMessages,
                                 suggestions
                             },
-                            systemIntent
+                            systemIntent,
+                            userStorage
                         }
                     },
                     fulfillmentMessages: messages,
@@ -573,8 +589,7 @@ class DialogflowInput extends chatbotbase_1.Input {
         this.data = data;
     }
     reply() {
-        const self = this;
-        return new DialogflowOutput(self.id + '.reply', self.userId, self.sessionId, self.platform, self.language, self.intent, "", self.context, this.data);
+        return new DialogflowOutput(this.id + '.reply', this.userId, this.sessionId, this.platform, this.language, this.intent, "", this.context, this.data);
     }
 }
 /**

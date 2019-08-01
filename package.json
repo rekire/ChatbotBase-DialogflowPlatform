@@ -1,6 +1,6 @@
 {
   "name": "chatbotbase-dialogflowplatform",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "The platform implementation for Dialogflow (v1 and v2) for ChatbotBase",
   "main": "Dialogflow.js",
   "types": "Dialogflow.d.ts",
@@ -28,7 +28,8 @@
   },
   "homepage": "https://github.com/rekire/ChatbotBase-DialogflowPlatform#readme",
   "dependencies": {
-    "chatbotbase": "^1.0.0"
+    "chatbotbase": "^1.0.0",
+    "uuid": "^3.3.2"
   },
   "devDependencies": {
     "typescript": "^3.5.3"
