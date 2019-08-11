@@ -26,8 +26,6 @@ export class Dialogflow extends VoicePlatform {
 
     private parseApiV1(body): Input {
         const data: Context = {};
-        const internalData = new Map<string, any>();
-        internalData.set('apiVersion', 1);
         let inputMethod = InputMethod.text;
         body.result.contexts.forEach(context => {
             if(context.parameters && context.parameters.boxed) {
@@ -47,9 +45,8 @@ export class Dialogflow extends VoicePlatform {
                 }
             }
             let storageUserId = null;
-            internalData.set('userStorage', body.originalRequest.payload.user.userStorage || "{}");
-            if(body.originalRequest.payload.user.userStorage) {
-                storageUserId = JSON.parse(body.originalRequest.payload.user.userStorage).userId;
+            if(body.originalRequest.data.user.userStorage) {
+                storageUserId = JSON.parse(body.originalRequest.data.user.userStorage).userId;
             }
             userId = body.originalRequest.data.user.userId || storageUserId;
             const inputs = body.originalRequest.data.inputs;
@@ -79,10 +76,7 @@ export class Dialogflow extends VoicePlatform {
             text = body.result.resolvedQuery;
             userId = 'unknown';
         }
-        if(body.originalRequest && body.originalRequest.data.device && body.originalRequest.data.device.location) {
-            internalData.set('location', body.originalRequest.data.device.location);
-        }
-        return new DialogflowInput(
+        const input = new Input(
             body.id,
             userId,
             body.sessionId,
@@ -93,15 +87,17 @@ export class Dialogflow extends VoicePlatform {
             inputMethod,
             text,
             data,
-            body.originalRequest && body.originalRequest.data && body.originalRequest.data.user && body.originalRequest.data.user.accessToken || null,
-            internalData);
+            body.originalRequest && body.originalRequest.data && body.originalRequest.data.user && body.originalRequest.data.user.accessToken || null);
+        if(body.originalRequest && body.originalRequest.data.device && body.originalRequest.data.device.location) {
+            input.internalData.set('df.userStorage', body.originalRequest.data.user.userStorage || "{}");
+            input.internalData.set('df.location', body.originalRequest.data.device.location);
+            input.internalData.set('df.apiVersion', 1);
+        }
+        return input;
     }
 
     private parseApiV2(body): Input {
         const data: Context = {};
-        const internalData = new Map<string, any>();
-        internalData.set('apiVersion', 2);
-        internalData.set('session', body.session);
         let inputMethod = InputMethod.text;
         body.queryResult.outputContexts.forEach(context => {
             const contextName = context.name.replace(`${body.session}/contexts/`, '');
@@ -122,7 +118,6 @@ export class Dialogflow extends VoicePlatform {
                 }
             }
             let storageUserId = null;
-            internalData.set('userStorage', body.originalDetectIntentRequest.payload.user.userStorage || "{}");
             if(body.originalRequest.payload.user.userStorage) {
                 storageUserId = JSON.parse(body.originalDetectIntentRequest.payload.user.userStorage).userId;
             }
@@ -152,10 +147,8 @@ export class Dialogflow extends VoicePlatform {
             text = body.queryResult.queryText;
             userId = 'unknown';
         }
-        if(body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.device && body.originalDetectIntentRequest.payload.device.location) {
-            internalData.set('location', body.originalDetectIntentRequest.payload.device.location);
-        }
-        return new DialogflowInput(
+
+        const input = new Input(
             body.responseId,
             userId,
             body.session,
@@ -166,8 +159,16 @@ export class Dialogflow extends VoicePlatform {
             inputMethod,
             text,
             data,
-            body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null,
-            internalData);
+            body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null);
+
+        if(body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.device && body.originalDetectIntentRequest.payload.device.location) {
+            input.internalData.set('df.location', body.originalDetectIntentRequest.payload.device.location);
+        }
+        input.internalData.set('df.apiVersion', 2);
+        input.internalData.set('df.session', body.session);
+        input.internalData.set('df.userStorage', body.originalDetectIntentRequest.payload.user.userStorage || "{}");
+
+        return input;
     }
 
     // TODO Find out why this is required
@@ -179,7 +180,7 @@ export class Dialogflow extends VoicePlatform {
         let ssml = "", displayText = "", richMessages = <any>[], suggestions = <any>[], context = <any>[], messages = <any>[];
         let hasSimpleMessage = false;
         let systemIntent: any = null;
-        const data = (<DialogflowOutput>output).data;
+        const data = output.internalData;
         output.replies.forEach(reply => {
             if(reply.platform === '*') {
                 if(reply.type === 'ssml') {
@@ -222,7 +223,7 @@ export class Dialogflow extends VoicePlatform {
             if((typeof value) !== 'object') {
                 value = {value: value, boxed: true};
             }
-            if(data.get('apiVersion') === 1) {
+            if(data.get('df.apiVersion') === 1) {
                 context.push({name: key, lifespan: 60, parameters: value});
             } else {
                 context.push({name: key, lifespanCount: 60, parameters: value});
@@ -250,10 +251,10 @@ export class Dialogflow extends VoicePlatform {
         if(!output.expectAnswer) {
             suggestions = null;
         }
-        const userStorageData = JSON.parse(data.get('userStorage'));
+        const userStorageData = JSON.parse(data.get('df.userStorage'));
         userStorageData.userId = output.userId;
         let userStorage = JSON.stringify(userStorageData);
-        switch(data.get('apiVersion')) {
+        switch(data.get('df.apiVersion')) {
         case 1:
             // add the plain response for dialogflow
             messages.push([{type: 0, speech: displayText}]);
@@ -309,7 +310,7 @@ export class Dialogflow extends VoicePlatform {
             messages.push(dialogflowV2Suggestions);
 
             // add prefix to each context
-            context.forEach(item => item.name = `${data.get('session')}/contexts/${item.name}`);
+            context.forEach(item => item.name = `${data.get('df.session')}/contexts/${item.name}`);
             return {
                 fulfillmentText: displayText,
                 payload: {
@@ -338,10 +339,7 @@ export class Dialogflow extends VoicePlatform {
     }
 
     static getPosition(input: Input): ActionsOnGoogleLocation | null {
-        if(input instanceof DialogflowInput) {
-            return input.data.get('location');
-        }
-        return null;
+        return input.internalData.get('df.location');
     }
 }
 
@@ -627,57 +625,4 @@ export class ActionsOnGoogleLocation {
 export class ActionsOnGoogleCoordinates {
     public latitude: number;
     public longitude: number;
-}
-
-/**
- * Private extended model to store metadata of an input.
- */
-class DialogflowInput extends Input {
-    /**
-     * Private internal data
-     */
-    data: Map<string, any>;
-
-    constructor(id: string,
-                userId: string,
-                sessionId: string,
-                language: string,
-                platform: string,
-                time: Date,
-                intent: string,
-                inputMethod: InputMethod,
-                message: string,
-                context: Context,
-                accessToken: string,
-                data: Map<string, any>) {
-        super(id, userId, sessionId, language, platform, time, intent, inputMethod, message, context, accessToken);
-        this.data = data;
-    }
-
-    reply(): Output {
-        return new DialogflowOutput(this.id + '.reply', this.userId, this.sessionId, this.platform, this.language, this.intent, "", this.context, this.data)
-    }
-}
-
-/**
- * Private extended model to store metadata of an input.
- */
-class DialogflowOutput extends Output {
-    /**
-     * Private internal data
-     */
-    data: Map<string, any>;
-
-    constructor(id: string,
-                userId: string,
-                sessionId: string,
-                platform: string,
-                language: string,
-                intent: string,
-                message: string,
-                context: Context,
-                data: Map<string, any>) {
-        super(id, userId, sessionId, platform, language, intent, message, context);
-        this.data = data;
-    }
 }
