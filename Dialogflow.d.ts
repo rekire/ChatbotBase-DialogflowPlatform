@@ -1,4 +1,4 @@
-import { Input, Output, Reply, Suggestion, VerifyDataHolder, VoicePermission, VoicePlatform } from 'chatbotbase';
+import { Input, Output, VerifyDataHolder, VoicePermission, VoicePlatform } from 'chatbotbase';
 export declare class Dialogflow extends VoicePlatform {
     platformId(): string;
     parse(body: any): Input;
@@ -12,44 +12,37 @@ export declare class Dialogflow extends VoicePlatform {
 declare type ReplyBuilder<T = {}> = new (...args: any[]) => T;
 export declare function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase): {
     new (...args: any[]): {
-        requestPermission(reason: string, permissions: string | VoicePermission | (string | VoicePermission)[]): Reply | undefined;
+        requestGooglePermission(reason: string, permissions: string | VoicePermission | (string | VoicePermission)[]): undefined;
         /**
          * Request an explicit login, if the target platform has the option to explicit log in the user. The Alexa platform
          * supports that this feature since version 0.8 the Dialogflow platform (in fact just Actions on Google) since 0.4
          * and only if the login is not set as mandatory in the Actions on Google console.
          * @returns {boolean} true if it is possible to request the login.
          */
-        requestLogin(): boolean | Reply;
+        requestGoogleLogin(): void;
         /**
          * Creates a simple response where the spoken text is equal to the shown text.
          * @param message the message the user should read and hear.
          */
-        simpleReply(message: string): Reply;
+        addGoogleSimpleResponse(message: string): void;
         /**
          * Creates a basic card holds a title, a messages and optional a button.
          * @param title The title of the card.
          * @param message The message of the card.
          * @param button The button which should be shown (optional).
          */
-        basicCard(title: string, message: string, button?: DialogflowButton | undefined): Reply;
+        addGoogleBasicCard(title: string, message: string, button?: DialogflowButton | undefined): void;
         /**
          * Creates a basic card with an image a title, a messages and optional a button.
-         * @param title The title of the card.
-         * @param message The message of the card.
          * @param imageUrl The url of the image to show.
          * @param accessibilityText The accessibility text for the image.
+         * @param title The title of the card.
+         * @param message The message of the card.
          * @param imageDisplayOptions The image display options, by default DEFAULT.
          * @param button The button which should be shown (optional).
          */
-        basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string, imageDisplayOptions?: ImageDisplays, button?: DialogflowButton | undefined): Reply;
-        suggestion(suggestion: string): Suggestion;
-        listResponse(cardTitle: string, list: ListItem[]): Reply;
-        /**
-         * Defines a
-         * @param ssml
-         * @param displayText
-         */
-        splittedSimpleReply(ssml: string, displayText: string): Reply;
+        basicCardWithPicture(imageUrl: string, accessibilityText: string, title?: string | undefined, message?: string | undefined, imageDisplayOptions?: ImageDisplays, button?: DialogflowButton | undefined): void;
+        addGoogleListResponse(cardTitle: string, list: ListItem[]): void;
     };
 } & TBase;
 export declare class DialogflowButton {

@@ -1,10 +1,9 @@
 import {
     Context,
+    DefaultReply,
     Input,
     InputMethod,
     Output,
-    Reply,
-    Suggestion,
     VerifyDataHolder,
     VoicePermission,
     VoicePlatform
@@ -177,7 +176,8 @@ export class Dialogflow extends VoicePlatform {
     }
 
     render(output: Output): any {
-        let ssml = "", displayText = "", richMessages = <any>[], suggestions = <any>[], context = <any>[], messages = <any>[];
+        let ssml = "", displayText = "", richMessages = <any>[], suggestions = <any>[], context = <any>[],
+            messages = <any>[];
         let hasSimpleMessage = false;
         let systemIntent: any = null;
         const data = output.internalData;
@@ -347,7 +347,7 @@ type ReplyBuilder<T = {}> = new (...args: any[]) => T;
 
 export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
     return class extends Base {
-        requestPermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]): Reply | undefined {
+        requestGooglePermission(reason: string, permissions: VoicePermission | string | (VoicePermission | string)[]) {
             let permissionList;
             if(permissions instanceof Array) {
                 permissionList = permissions;
@@ -375,10 +375,10 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
                     voicePermissions.push(permission);
                     break;
                 default:
-                    return undefined;
+                    return;
                 }
             });
-            return {
+            (<DefaultReply><any>this).addReply({
                 platform: 'ActionsOnGoogle',
                 type: 'permission',
                 render: () => {
@@ -390,7 +390,7 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
                     }
                 },
                 debug: () => 'Asking for permission: ' + voicePermissions.join(', ')
-            };
+            });
         }
 
         /**
@@ -399,9 +399,9 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
          * and only if the login is not set as mandatory in the Actions on Google console.
          * @returns {boolean} true if it is possible to request the login.
          */
-        requestLogin(): boolean | Reply {
+        requestGoogleLogin() {
             // ref: https://developers.google.com/actions/identity/account-linking#json
-            return {
+            (<DefaultReply><any>this).addReply({
                 platform: 'ActionsOnGoogle',
                 type: 'system_intent',
                 render: () => {
@@ -411,15 +411,15 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
                     }
                 },
                 debug: () => 'Login request'
-            };
+            });
         }
 
         /**
          * Creates a simple response where the spoken text is equal to the shown text.
          * @param message the message the user should read and hear.
          */
-        simpleReply(message: string): Reply {
-            return {
+        addGoogleSimpleResponse(message: string) {
+            (<DefaultReply><any>this).addReply({
                 platform: 'Dialogflow',
                 type: 'simpleMessage',
                 render: () => {
@@ -431,7 +431,7 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
                     }
                 },
                 debug: () => message
-            };
+            });
         }
 
         /**
@@ -440,8 +440,8 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
          * @param message The message of the card.
          * @param button The button which should be shown (optional).
          */
-        basicCard(title: string, message: string, button?: DialogflowButton): Reply {
-            return {
+        addGoogleBasicCard(title: string, message: string, button?: DialogflowButton) {
+            (<DefaultReply><any>this).addReply({
                 platform: 'Dialogflow',
                 type: 'basicCard',
                 render: () => {
@@ -454,57 +454,47 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
                     }
                 },
                 debug: () => `${title}: ${message}`
-            };
+            });
         }
 
         /**
          * Creates a basic card with an image a title, a messages and optional a button.
-         * @param title The title of the card.
-         * @param message The message of the card.
          * @param imageUrl The url of the image to show.
          * @param accessibilityText The accessibility text for the image.
+         * @param title The title of the card.
+         * @param message The message of the card.
          * @param imageDisplayOptions The image display options, by default DEFAULT.
          * @param button The button which should be shown (optional).
          */
-        // FIXME if there is an image the title and text is optional
-        basicCardWithPicture(title: string, message: string, imageUrl: string, accessibilityText: string, imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, button?: DialogflowButton): Reply {
-            return {
+        basicCardWithPicture(imageUrl: string, accessibilityText: string, title: string | undefined = undefined, message: string | undefined = undefined, imageDisplayOptions: ImageDisplays = ImageDisplays.DEFAULT, button?: DialogflowButton) {
+            const basicCard = {
+                image: {
+                    url: imageUrl,
+                    accessibilityText: accessibilityText
+                },
+                buttons: typeof button === 'object' ? [button.render()] : [],
+                imageDisplayOptions: imageDisplayOptions
+            };
+            if(title) {
+                basicCard["title"] = title;
+            }
+            if(message) {
+                basicCard["formattedText"] = message;
+            }
+            (<DefaultReply><any>this).addReply({
                 platform: 'Dialogflow',
                 type: 'basicCard',
                 render: () => {
-                    return {
-                        basicCard: {
-                            title,
-                            formattedText: message,
-                            image: {
-                                url: imageUrl,
-                                accessibilityText: accessibilityText
-                            },
-                            buttons: typeof button === 'object' ? [button.render()] : [],
-                            imageDisplayOptions: imageDisplayOptions
-                        }
-                    }
+                    return {basicCard}
                 },
-                debug: () => message
-            };
+                debug: () => `Picture (${accessibilityText}) with title "${title}" and message "${message}"`
+            });
         }
 
-        suggestion(suggestion: string): Suggestion {
-            return <Suggestion>{
-                platform: 'Dialogflow',
-                render: () => {
-                    return {
-                        title: suggestion
-                    }
-                },
-                toString: () => suggestion
-            };
-        }
-
-        listResponse(cardTitle: string, list: ListItem[]): Reply {
+        addGoogleListResponse(cardTitle: string, list: ListItem[]) {
             const items: any[] = [];
             list.forEach(item => items.push(item.render()));
-            return {
+            (<DefaultReply><any>this).addReply({
                 platform: 'Dialogflow',
                 type: 'listCard',
                 render: () => {
@@ -516,28 +506,7 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
                     }
                 },
                 debug: () => 'debug'
-            }
-        }
-
-        /**
-         * Defines a
-         * @param ssml
-         * @param displayText
-         */
-        splittedSimpleReply(ssml: string, displayText: string): Reply {
-            return {
-                platform: 'Dialogflow',
-                type: 'simpleMessage',
-                render: () => {
-                    return {
-                        simpleResponse: {
-                            textToSpeech: `<speak>${ssml}</speak>`,
-                            displayText
-                        }
-                    };
-                },
-                debug: () => displayText
-            };
+            });
         }
     }
 }
