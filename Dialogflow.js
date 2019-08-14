@@ -434,7 +434,7 @@ function DialogflowReply(Base) {
          * @param imageDisplayOptions The image display options, by default DEFAULT.
          * @param button The button which should be shown (optional).
          */
-        basicCardWithPicture(imageUrl, accessibilityText, title = undefined, message = undefined, imageDisplayOptions = ImageDisplays.DEFAULT, button) {
+        addGoogleCardWithPicture(imageUrl, accessibilityText, title = undefined, message = undefined, imageDisplayOptions = ImageDisplays.DEFAULT, button) {
             const basicCard = {
                 image: {
                     url: imageUrl,

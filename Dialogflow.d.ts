@@ -41,7 +41,7 @@ export declare function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase)
          * @param imageDisplayOptions The image display options, by default DEFAULT.
          * @param button The button which should be shown (optional).
          */
-        basicCardWithPicture(imageUrl: string, accessibilityText: string, title?: string | undefined, message?: string | undefined, imageDisplayOptions?: ImageDisplays, button?: DialogflowButton | undefined): void;
+        addGoogleCardWithPicture(imageUrl: string, accessibilityText: string, title?: string | undefined, message?: string | undefined, imageDisplayOptions?: ImageDisplays, button?: DialogflowButton | undefined): void;
         addGoogleListResponse(cardTitle: string, list: ListItem[]): void;
     };
 } & TBase;
