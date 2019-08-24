@@ -8,7 +8,7 @@ import {
     VoicePermission,
     VoicePlatform
 } from 'chatbotbase';
-import {uuidv4} from 'uuid/v4';
+import * as uuidv4 from 'uuid/v4';
 
 // TODO split the logic since this is just partially supporting Dialogflow (in fact just Actions on Google)
 export class Dialogflow extends VoicePlatform {
@@ -45,9 +45,9 @@ export class Dialogflow extends VoicePlatform {
             }
             let storageUserId = null;
             if(body.originalRequest.data.user.userStorage) {
-                storageUserId = JSON.parse(body.originalRequest.data.user.userStorage).userId;
+                storageUserId = JSON.parse(body.originalRequest.data.user.userStorage || "{}").data.userId;
             }
-            userId = body.originalRequest.data.user.userId || storageUserId;
+            userId = body.originalRequest.data.user.userId || storageUserId || uuidv4();
             const inputs = body.originalRequest.data.inputs;
             for(let i = 0; i < inputs.length; i++) {
                 if(inputs[i].rawInputs) {
@@ -88,10 +88,10 @@ export class Dialogflow extends VoicePlatform {
             data,
             body.originalRequest && body.originalRequest.data && body.originalRequest.data.user && body.originalRequest.data.user.accessToken || null);
         if(body.originalRequest && body.originalRequest.data.device && body.originalRequest.data.device.location) {
-            input.internalData.set('df.userStorage', body.originalRequest.data.user.userStorage || "{}");
+            input.internalData.set('df.userStorage', body.originalRequest.data.user.userStorage || JSON.stringify({data:{userId}}));
             input.internalData.set('df.location', body.originalRequest.data.device.location);
-            input.internalData.set('df.apiVersion', 1);
         }
+        input.internalData.set('df.apiVersion', 1);
         return input;
     }
 
@@ -117,8 +117,8 @@ export class Dialogflow extends VoicePlatform {
                 }
             }
             let storageUserId = null;
-            if(body.originalRequest.payload.user.userStorage) {
-                storageUserId = JSON.parse(body.originalDetectIntentRequest.payload.user.userStorage).userId;
+            if(body.originalDetectIntentRequest.payload.user.userStorage) {
+                storageUserId = JSON.parse(body.originalDetectIntentRequest.payload.user.userStorage).data.userId;
             }
             userId = body.originalDetectIntentRequest.payload.user.userId || storageUserId || uuidv4();
             body.originalDetectIntentRequest.payload.inputs.forEach(input => {
@@ -158,14 +158,14 @@ export class Dialogflow extends VoicePlatform {
             inputMethod,
             text,
             data,
-            body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null);
+            body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user && body.originalDetectIntentRequest.payload.user.accessToken || null);
 
         if(body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.device && body.originalDetectIntentRequest.payload.device.location) {
             input.internalData.set('df.location', body.originalDetectIntentRequest.payload.device.location);
         }
         input.internalData.set('df.apiVersion', 2);
         input.internalData.set('df.session', body.session);
-        input.internalData.set('df.userStorage', body.originalDetectIntentRequest.payload.user.userStorage || "{}");
+        input.internalData.set('df.userStorage', ((body.originalDetectIntentRequest.payload.user && body.originalDetectIntentRequest.payload.user.userStorage) || JSON.stringify({data:{userId}})).data);
 
         return input;
     }
@@ -233,9 +233,9 @@ export class Dialogflow extends VoicePlatform {
         displayText = displayText || '';
         ssml = ssml || displayText.replace(/<[^>]+>/g, '');
         displayText = displayText || ssml.replace(/<[^>]+>/g, '');
-        if(ssml.indexOf("<") >= 0) {
-            ssml = `<speak>${ssml}</speak>`;
-        }
+        //if(ssml.indexOf("<") > 0) {
+        //    ssml = `<speak>${ssml}</speak>`;
+        //}
         // add the display response if there is no explicit simple response
         if(!hasSimpleMessage) {
             // insert at front
@@ -251,11 +251,11 @@ export class Dialogflow extends VoicePlatform {
         if(!output.expectAnswer) {
             suggestions = null;
         }
-        const userStorageData = JSON.parse(data.get('df.userStorage'));
+        const userStorageData = JSON.parse(data.get('df.userStorage') || "{}");
         userStorageData.userId = output.userId;
-        let userStorage = JSON.stringify(userStorageData);
+        let userStorage = JSON.stringify({data:userStorageData});
         switch(data.get('df.apiVersion')) {
-        case 1:
+        case 1: {
             // add the plain response for dialogflow
             messages.push([{type: 0, speech: displayText}]);
             const dialogflowV1Suggestions = {
@@ -268,7 +268,7 @@ export class Dialogflow extends VoicePlatform {
                 }
             });
             messages.push(dialogflowV1Suggestions);
-            return {
+            const response = {
                 speech: `<speak>${ssml}</speak>`,
                 displayText,
                 data: {
@@ -287,14 +287,19 @@ export class Dialogflow extends VoicePlatform {
                 contextOut: context,
                 source: 'ChatbotBase'
             };
-        case 2:
+            if(systemIntent == null) {
+                delete response.data.google.systemIntent;
+            }
+            return response;
+        }
+        case 2: {
             // add the plain response for dialogflow
-            messages.push([{
+            messages.push({
                 platform: "ACTIONS_ON_GOOGLE",
                 text: {
-                    text: displayText
+                    text: [displayText]
                 }
-            }]);
+            });
             const dialogflowV2Suggestions = {
                 platform: "ACTIONS_ON_GOOGLE",
                 quickReplies: {
@@ -307,11 +312,16 @@ export class Dialogflow extends VoicePlatform {
                     dialogflowV2Suggestions.quickReplies.quickReplies.push(suggestion.render())
                 }
             });
-            messages.push(dialogflowV2Suggestions);
+            if(output.suggestions.length > 0) {
+                messages.push(dialogflowV2Suggestions);
+            }
+            if(!output.expectAnswer) {
+                context = [];
+            }
 
             // add prefix to each context
             context.forEach(item => item.name = `${data.get('df.session')}/contexts/${item.name}`);
-            return {
+            const response = {
                 fulfillmentText: displayText,
                 payload: {
                     google: {
@@ -329,6 +339,14 @@ export class Dialogflow extends VoicePlatform {
                 outputContexts: context,
                 source: 'ChatbotBase'
             };
+            if(output.suggestions.length == 0) {
+                delete response.payload.google.richResponse.suggestions;
+            }
+            if(systemIntent == null) {
+                delete response.payload.google.systemIntent;
+            }
+            return response;
+        }
         default:
             throw Error("Cannot find out correct output format");
         }
@@ -417,15 +435,16 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
         /**
          * Creates a simple response where the spoken text is equal to the shown text.
          * @param message the message the user should read and hear.
+         * @param ssml the optional ssml of the response if not set it will take the message for ssml.
          */
-        addGoogleSimpleResponse(message: string) {
+        addGoogleSimpleResponse(message: string, ssml?: string) {
             (<DefaultReply><any>this).addReply({
                 platform: 'Dialogflow',
                 type: 'simpleMessage',
                 render: () => {
                     return {
                         simpleResponse: {
-                            textToSpeech: message,
+                            ssml: ssml || message,
                             displayText: message
                         }
                     }

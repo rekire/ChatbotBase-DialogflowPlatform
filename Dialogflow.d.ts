@@ -23,8 +23,9 @@ export declare function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase)
         /**
          * Creates a simple response where the spoken text is equal to the shown text.
          * @param message the message the user should read and hear.
+         * @param ssml the optional ssml of the response if not set it will take the message for ssml.
          */
-        addGoogleSimpleResponse(message: string): void;
+        addGoogleSimpleResponse(message: string, ssml?: string | undefined): void;
         /**
          * Creates a basic card holds a title, a messages and optional a button.
          * @param title The title of the card.

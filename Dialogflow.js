@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const chatbotbase_1 = require("chatbotbase");
-const v4_1 = require("uuid/v4");
+const uuidv4 = require("uuid/v4");
 // TODO split the logic since this is just partially supporting Dialogflow (in fact just Actions on Google)
 class Dialogflow extends chatbotbase_1.VoicePlatform {
     platformId() {
@@ -38,9 +38,9 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             }
             let storageUserId = null;
             if (body.originalRequest.data.user.userStorage) {
-                storageUserId = JSON.parse(body.originalRequest.data.user.userStorage).userId;
+                storageUserId = JSON.parse(body.originalRequest.data.user.userStorage || "{}").data.userId;
             }
-            userId = body.originalRequest.data.user.userId || storageUserId;
+            userId = body.originalRequest.data.user.userId || storageUserId || uuidv4();
             const inputs = body.originalRequest.data.inputs;
             for (let i = 0; i < inputs.length; i++) {
                 if (inputs[i].rawInputs) {
@@ -71,10 +71,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         }
         const input = new chatbotbase_1.Input(body.id, userId, body.sessionId, body.lang || body.originalRequest.data.user.locale, platform, new Date(body.timestamp), body.result.metadata.intentName, inputMethod, text, data, body.originalRequest && body.originalRequest.data && body.originalRequest.data.user && body.originalRequest.data.user.accessToken || null);
         if (body.originalRequest && body.originalRequest.data.device && body.originalRequest.data.device.location) {
-            input.internalData.set('df.userStorage', body.originalRequest.data.user.userStorage || "{}");
+            input.internalData.set('df.userStorage', body.originalRequest.data.user.userStorage || JSON.stringify({ data: { userId } }));
             input.internalData.set('df.location', body.originalRequest.data.device.location);
-            input.internalData.set('df.apiVersion', 1);
         }
+        input.internalData.set('df.apiVersion', 1);
         return input;
     }
     parseApiV2(body) {
@@ -100,10 +100,10 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                 }
             }
             let storageUserId = null;
-            if (body.originalRequest.payload.user.userStorage) {
-                storageUserId = JSON.parse(body.originalDetectIntentRequest.payload.user.userStorage).userId;
+            if (body.originalDetectIntentRequest.payload.user.userStorage) {
+                storageUserId = JSON.parse(body.originalDetectIntentRequest.payload.user.userStorage).data.userId;
             }
-            userId = body.originalDetectIntentRequest.payload.user.userId || storageUserId || v4_1.uuidv4();
+            userId = body.originalDetectIntentRequest.payload.user.userId || storageUserId || uuidv4();
             body.originalDetectIntentRequest.payload.inputs.forEach(input => {
                 if (input.rawInputs) {
                     input.rawInputs.forEach(rawInput => {
@@ -130,13 +130,13 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
             text = body.queryResult.queryText;
             userId = 'unknown';
         }
-        const input = new chatbotbase_1.Input(body.responseId, userId, body.session, body.queryResult.languageCode, platform, new Date(), body.queryResult.intent.displayName, inputMethod, text, data, body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user.accessToken || null);
+        const input = new chatbotbase_1.Input(body.responseId, userId, body.session, body.queryResult.languageCode, platform, new Date(), body.queryResult.intent.displayName, inputMethod, text, data, body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.user && body.originalDetectIntentRequest.payload.user.accessToken || null);
         if (body.originalDetectIntentRequest && body.originalDetectIntentRequest.payload.device && body.originalDetectIntentRequest.payload.device.location) {
             input.internalData.set('df.location', body.originalDetectIntentRequest.payload.device.location);
         }
         input.internalData.set('df.apiVersion', 2);
         input.internalData.set('df.session', body.session);
-        input.internalData.set('df.userStorage', body.originalDetectIntentRequest.payload.user.userStorage || "{}");
+        input.internalData.set('df.userStorage', ((body.originalDetectIntentRequest.payload.user && body.originalDetectIntentRequest.payload.user.userStorage) || JSON.stringify({ data: { userId } })).data);
         return input;
     }
     // TODO Find out why this is required
@@ -208,9 +208,9 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         displayText = displayText || '';
         ssml = ssml || displayText.replace(/<[^>]+>/g, '');
         displayText = displayText || ssml.replace(/<[^>]+>/g, '');
-        if (ssml.indexOf("<") >= 0) {
-            ssml = `<speak>${ssml}</speak>`;
-        }
+        //if(ssml.indexOf("<") > 0) {
+        //    ssml = `<speak>${ssml}</speak>`;
+        //}
         // add the display response if there is no explicit simple response
         if (!hasSimpleMessage) {
             // insert at front
@@ -226,11 +226,11 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
         if (!output.expectAnswer) {
             suggestions = null;
         }
-        const userStorageData = JSON.parse(data.get('df.userStorage'));
+        const userStorageData = JSON.parse(data.get('df.userStorage') || "{}");
         userStorageData.userId = output.userId;
-        let userStorage = JSON.stringify(userStorageData);
+        let userStorage = JSON.stringify({ data: userStorageData });
         switch (data.get('df.apiVersion')) {
-            case 1:
+            case 1: {
                 // add the plain response for dialogflow
                 messages.push([{ type: 0, speech: displayText }]);
                 const dialogflowV1Suggestions = {
@@ -243,7 +243,7 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     }
                 });
                 messages.push(dialogflowV1Suggestions);
-                return {
+                const response = {
                     speech: `<speak>${ssml}</speak>`,
                     displayText,
                     data: {
@@ -262,14 +262,19 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     contextOut: context,
                     source: 'ChatbotBase'
                 };
-            case 2:
+                if (systemIntent == null) {
+                    delete response.data.google.systemIntent;
+                }
+                return response;
+            }
+            case 2: {
                 // add the plain response for dialogflow
-                messages.push([{
-                        platform: "ACTIONS_ON_GOOGLE",
-                        text: {
-                            text: displayText
-                        }
-                    }]);
+                messages.push({
+                    platform: "ACTIONS_ON_GOOGLE",
+                    text: {
+                        text: [displayText]
+                    }
+                });
                 const dialogflowV2Suggestions = {
                     platform: "ACTIONS_ON_GOOGLE",
                     quickReplies: {
@@ -282,10 +287,15 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                         dialogflowV2Suggestions.quickReplies.quickReplies.push(suggestion.render());
                     }
                 });
-                messages.push(dialogflowV2Suggestions);
+                if (output.suggestions.length > 0) {
+                    messages.push(dialogflowV2Suggestions);
+                }
+                if (!output.expectAnswer) {
+                    context = [];
+                }
                 // add prefix to each context
                 context.forEach(item => item.name = `${data.get('df.session')}/contexts/${item.name}`);
-                return {
+                const response = {
                     fulfillmentText: displayText,
                     payload: {
                         google: {
@@ -303,6 +313,14 @@ class Dialogflow extends chatbotbase_1.VoicePlatform {
                     outputContexts: context,
                     source: 'ChatbotBase'
                 };
+                if (output.suggestions.length == 0) {
+                    delete response.payload.google.richResponse.suggestions;
+                }
+                if (systemIntent == null) {
+                    delete response.payload.google.systemIntent;
+                }
+                return response;
+            }
             default:
                 throw Error("Cannot find out correct output format");
         }
@@ -387,15 +405,16 @@ function DialogflowReply(Base) {
         /**
          * Creates a simple response where the spoken text is equal to the shown text.
          * @param message the message the user should read and hear.
+         * @param ssml the optional ssml of the response if not set it will take the message for ssml.
          */
-        addGoogleSimpleResponse(message) {
+        addGoogleSimpleResponse(message, ssml) {
             this.addReply({
                 platform: 'Dialogflow',
                 type: 'simpleMessage',
                 render: () => {
                     return {
                         simpleResponse: {
-                            textToSpeech: message,
+                            ssml: ssml || message,
                             displayText: message
                         }
                     };
