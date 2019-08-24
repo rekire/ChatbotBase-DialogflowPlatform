@@ -241,7 +241,7 @@ export class Dialogflow extends VoicePlatform {
             // insert at front
             const newList = [{
                 simpleResponse: {
-                    textToSpeech: ssml,
+                    ssml: `<speak>${ssml}</speak>`,
                     displayText
                 }
             }];
@@ -444,7 +444,7 @@ export function DialogflowReply<TBase extends ReplyBuilder>(Base: TBase) {
                 render: () => {
                     return {
                         simpleResponse: {
-                            ssml: ssml || message,
+                            ssml: `<speak>${ssml || message}</speak>`,
                             displayText: message
                         }
                     }
